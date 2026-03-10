@@ -1,0 +1,25 @@
+{
+  "name": "aws-pricing-calculator-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Internal MCP that plans, creates, and validates official AWS Pricing Calculator links for partner funding workflows.",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "aws-pricing-calculator-mcp": "./bin/aws-pricing-calculator-mcp.js"
+  },
+  "scripts": {
+    "start": "node ./bin/aws-pricing-calculator-mcp.js",
+    "lint": "node --check bin/aws-pricing-calculator-mcp.js && node --check src/index.js && node --check src/server.js && node --check src/catalog.js && node --check src/model.js && node --check src/planner.js && node --check src/validation.js && node --check src/calculator-client.js && node --check test/planner.test.js && node --check test/validation.test.js && node --check test/calculator-client.test.js && node --check test/live-roundtrip.test.js",
+    "test": "node --test",
+    "test:live": "AWS_CALCULATOR_LIVE=1 node --test test/live-roundtrip.test.js",
+    "check": "npm run lint && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "zod": "^4.1.5"
+  }
+}
