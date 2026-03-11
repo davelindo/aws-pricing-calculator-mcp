@@ -1,15 +1,14 @@
 import {
   DEFAULT_BUDGET_TOLERANCE_PCT,
+  DEFAULT_REGION,
+  getBlueprint,
   getTemplate,
+  resolveBlueprintIdForTemplate,
 } from "./catalog.js";
+import { findServiceDefinitionByCalculatorServiceCode } from "./services/index.js";
 import {
   ENVIRONMENTS,
-  modelEc2MonthlyUsd,
-  modelEksMonthlyUsd,
-  modelNatMonthlyUsd,
-  modelRdsMonthlyUsd,
   parseEnvironmentTag,
-  parseNumericValue,
   percent,
   regionsFor,
   roundCurrency,
@@ -18,8 +17,64 @@ import {
   serviceMonthlyUsd,
 } from "./model.js";
 
+const VALIDATION_SCHEMA_VERSION = "4.0";
+const PACK_METADATA = {
+  "pricing-integrity": {
+    title: "Pricing Integrity",
+  },
+  "architecture-completeness": {
+    title: "Architecture Completeness",
+  },
+  "funding-readiness": {
+    title: "Funding Readiness",
+  },
+  "platform-governance": {
+    title: "Platform Governance",
+  },
+};
+const DEFAULT_PACK_ORDER = Object.keys(PACK_METADATA);
+const ROUNDING_TOLERANCE_USD = 0.02;
+const EDGE_SERVICE_CODES = new Set([
+  "amazonCloudFront",
+  "amazonApiGateway",
+  "amazonELB",
+  "amazonRoute53",
+]);
+const PREMIUM_SERVICE_IDS = new Set([
+  "amazon-rds-sqlserver",
+  "amazon-aurora-postgresql",
+  "amazon-aurora-mysql",
+  "amazon-opensearch",
+  "amazon-fsx-windows",
+]);
+const JUSTIFICATION_SIGNAL = /(regulat|residency|sovereign|compliance|latency|security|incident|license|migration|moderni)/i;
+
 function inferTemplateIdFromServices(services) {
   const serviceCodes = serviceCodesFor(services);
+
+  if (
+    serviceCodes.includes("amazonAthena") ||
+    serviceCodes.includes("amazonRedshift") ||
+    serviceCodes.includes("awsEtlJobsAndDevelopmentEndpoints") ||
+    serviceCodes.includes("awsGlueDataCatalogStorageRequests") ||
+    serviceCodes.includes("awsGlueCrawlers")
+  ) {
+    return "enterprise-data-lake-standard";
+  }
+
+  if (
+    serviceCodes.includes("amazonRDSAuroraPostgreSQLCompatibleDB") &&
+    serviceCodes.includes("amazonS3")
+  ) {
+    if (
+      serviceCodes.includes("amazonElasticsearchService") ||
+      serviceCodes.includes("awsPrivateLinkVpc")
+    ) {
+      return "enterprise-data-standard";
+    }
+
+    return "data-platform-standard";
+  }
 
   if (serviceCodes.includes("awsEks")) {
     return "eks-rds-standard";
@@ -33,77 +88,26 @@ function inferTemplateIdFromServices(services) {
 }
 
 function modeledServiceMonthlyUsd(service) {
-  const region = service?.region;
+  const definition = findServiceDefinitionByCalculatorServiceCode(service?.serviceCode);
 
   try {
-    switch (service?.serviceCode) {
-      case "awsEks": {
-        const clusterCount = parseNumericValue(
-          service?.calculationComponents?.numberOfEKSClusters?.value,
-          0,
-        );
-
-        return {
-          supported: true,
-          monthlyUsd: modelEksMonthlyUsd(region, clusterCount),
-        };
-      }
-      case "ec2Enhancement": {
-        const operatingSystem = service?.calculationComponents?.selectedOS?.value;
-        const instanceType = service?.calculationComponents?.instanceType?.value;
-        const instanceCount = parseNumericValue(
-          service?.calculationComponents?.workload?.value?.data,
-          0,
-        );
-
-        return {
-          supported: true,
-          monthlyUsd: modelEc2MonthlyUsd(region, operatingSystem, instanceType, instanceCount),
-        };
-      }
-      case "amazonRDSPostgreSQLDB": {
-        const storageGb = parseNumericValue(service?.calculationComponents?.storageAmount?.value, 0);
-        const rows = service?.calculationComponents?.columnFormIPM?.value ?? [];
-        const monthlyUsd = roundCurrency(
-          rows.reduce((sum, row) => {
-            const instanceType = row?.["Instance Type"]?.value;
-            const deploymentOption = row?.["Deployment Option"]?.value;
-            const nodeCount = parseNumericValue(row?.["Number of Nodes"]?.value, 1);
-
-            return (
-              sum +
-              modelRdsMonthlyUsd(region, instanceType, deploymentOption, storageGb, nodeCount)
-            );
-          }, 0),
-        );
-
-        return {
-          supported: true,
-          monthlyUsd,
-        };
-      }
-      case "amazonVirtualPrivateCloud": {
-        const nat = service?.subServices?.[0]?.calculationComponents ?? {};
-
-        return {
-          supported: true,
-          monthlyUsd: modelNatMonthlyUsd(
-            region,
-            parseNumericValue(nat.regionalNatGatewayCount?.value, 0),
-            parseNumericValue(nat.regionalNatGatewayAzCount?.value, 0),
-            parseNumericValue(nat.regionalNatGatewayDataProcessed?.value, 0),
-          ),
-        };
-      }
-      default:
-        return {
-          supported: false,
-          monthlyUsd: serviceMonthlyUsd(service),
-        };
+    if (!definition?.modelSavedMonthlyUsd) {
+      return {
+        supported: false,
+        serviceId: definition?.id ?? null,
+        monthlyUsd: serviceMonthlyUsd(service),
+      };
     }
+
+    return {
+      supported: true,
+      serviceId: definition.id,
+      monthlyUsd: roundCurrency(definition.modelSavedMonthlyUsd(service)),
+    };
   } catch (error) {
     return {
       supported: false,
+      serviceId: definition?.id ?? null,
       monthlyUsd: serviceMonthlyUsd(service),
       error: error instanceof Error ? error.message : String(error),
     };
@@ -111,41 +115,119 @@ function modeledServiceMonthlyUsd(service) {
 }
 
 function summarizeModeling(services) {
-  const comparisons = serviceEntries(services).map((service) => {
+  const parityDetails = serviceEntries(services).map((service) => {
     const modeled = modeledServiceMonthlyUsd(service);
+
     return {
+      serviceId: modeled.serviceId,
       serviceCode: service.serviceCode,
       region: service.region,
       storedMonthlyUsd: serviceMonthlyUsd(service),
       modeledMonthlyUsd: modeled.monthlyUsd,
+      deltaUsd: roundCurrency(serviceMonthlyUsd(service) - modeled.monthlyUsd),
       supported: modeled.supported,
       error: modeled.error ?? null,
     };
   });
 
   return {
-    comparisons,
+    parityDetails,
     storedMonthlyUsd: roundCurrency(
-      comparisons.reduce((sum, comparison) => sum + comparison.storedMonthlyUsd, 0),
+      parityDetails.reduce((sum, comparison) => sum + comparison.storedMonthlyUsd, 0),
     ),
     modeledMonthlyUsd: roundCurrency(
-      comparisons.reduce((sum, comparison) => sum + comparison.modeledMonthlyUsd, 0),
+      parityDetails.reduce((sum, comparison) => sum + comparison.modeledMonthlyUsd, 0),
     ),
-    unsupportedComparisons: comparisons.filter((comparison) => !comparison.supported),
-    mismatchedComparisons: comparisons.filter(
+    unsupportedComparisons: parityDetails.filter((comparison) => !comparison.supported),
+    mismatchedComparisons: parityDetails.filter(
       (comparison) =>
-        comparison.supported &&
-        Math.abs(comparison.storedMonthlyUsd - comparison.modeledMonthlyUsd) > 0.01,
+        comparison.supported && Math.abs(comparison.deltaUsd) > ROUNDING_TOLERANCE_USD,
     ),
   };
 }
 
-function makeCheck(name, status, details, blocking = true) {
+function withinRoundingTolerance(left, right) {
+  return roundCurrency(Math.abs(Number(left ?? 0) - Number(right ?? 0))) <= ROUNDING_TOLERANCE_USD;
+}
+
+function makeRuleResult({
+  pack,
+  id,
+  title,
+  status,
+  severity,
+  reason,
+  remediation,
+  details,
+  blocking = true,
+  evidence = null,
+}) {
   return {
-    name,
+    pack,
+    id,
+    title,
     status,
+    severity,
     blocking,
+    reason,
+    remediation,
     details,
+    evidence,
+  };
+}
+
+function groupChecksIntoPacks(checks) {
+  return DEFAULT_PACK_ORDER.map((packId) => {
+    const packChecks = checks.filter((check) => check.pack === packId);
+
+    if (packChecks.length === 0) {
+      return null;
+    }
+
+    return {
+      id: packId,
+      title: PACK_METADATA[packId]?.title ?? packId,
+      passed: packChecks.every((check) => check.status !== "fail" || !check.blocking),
+      blocking: packChecks.some((check) => check.blocking),
+      failedRuleCount: packChecks.filter((check) => check.status === "fail").length,
+      warningRuleCount: packChecks.filter((check) => check.status === "warning").length,
+      checks: packChecks,
+    };
+  }).filter(Boolean);
+}
+
+function summarizeValidation({ checks, assumptions, parityDetails = [] }) {
+  const blockingFailures = checks
+    .filter((check) => check.status === "fail" && check.blocking)
+    .map((check) => ({
+      id: check.id,
+      title: check.title,
+      details: check.details,
+      remediation: check.remediation,
+    }));
+  const warningRules = checks
+    .filter(
+      (check) =>
+        check.status === "warning" || (check.status === "fail" && !check.blocking),
+    )
+    .map((check) => ({
+      id: check.id,
+      title: check.title,
+      details: check.details,
+      remediation: check.remediation,
+    }));
+
+  return {
+    schemaVersion: VALIDATION_SCHEMA_VERSION,
+    checks,
+    packs: groupChecksIntoPacks(checks),
+    blockingFailures,
+    warningRules,
+    hardFailures: blockingFailures.map((failure) => `${failure.id}: ${failure.details}`),
+    warnings: warningRules.map((warning) => `${warning.id}: ${warning.details}`),
+    assumptions,
+    parityDetails,
+    passed: blockingFailures.length === 0,
   };
 }
 
@@ -160,10 +242,32 @@ function presentEnvironments(services) {
   ];
 }
 
-function buildChecks({
+function serviceDefinitionsForSavedEstimate(services) {
+  return serviceEntries(services)
+    .map((service) => findServiceDefinitionByCalculatorServiceCode(service.serviceCode))
+    .filter(Boolean);
+}
+
+function serviceFamiliesForSavedEstimate(services) {
+  return [...new Set(serviceDefinitionsForSavedEstimate(services).map((service) => service.category))];
+}
+
+function estimateTextCorpus(estimate, services) {
+  return [
+    estimate?.name ?? "",
+    ...serviceEntries(services).map((service) => service.description ?? ""),
+  ].join(" ");
+}
+
+function hasJustification(text) {
+  return JUSTIFICATION_SIGNAL.test(String(text ?? ""));
+}
+
+function buildSavedEstimateChecks({
   estimate,
   services,
   template,
+  blueprint,
   expectedMonthlyUsd,
   expectedRegion,
   budgetTolerancePct,
@@ -172,9 +276,11 @@ function buildChecks({
   const groupMonthlyUsd = roundCurrency(Number(estimate?.groupSubtotal?.monthly ?? 0));
   const regions = regionsFor(services);
   const serviceCodes = serviceCodesFor(services);
+  const serviceFamilies = serviceFamiliesForSavedEstimate(services);
   const modeled = summarizeModeling(services);
   const supportedEnvironments = presentEnvironments(services);
-  const missingEnvironments = ENVIRONMENTS.filter(
+  const expectedEnvironments = template.expectedEnvironments ?? ENVIRONMENTS;
+  const missingEnvironments = expectedEnvironments.filter(
     (environment) => !supportedEnvironments.includes(environment),
   );
   const ec2OperatingSystems = [
@@ -190,7 +296,8 @@ function buildChecks({
       .filter((service) => template.supportiveServiceCodes.includes(service.serviceCode))
       .reduce((sum, service) => sum + modeledServiceMonthlyUsd(service).monthlyUsd, 0),
   );
-  const supportiveRatio = modeled.modeledMonthlyUsd > 0 ? supportiveUsd / modeled.modeledMonthlyUsd : 0;
+  const supportiveRatio =
+    modeled.modeledMonthlyUsd > 0 ? supportiveUsd / modeled.modeledMonthlyUsd : 0;
   const primaryRatio = modeled.modeledMonthlyUsd > 0 ? 1 - supportiveRatio : 0;
   const toleranceUsd =
     expectedMonthlyUsd == null
@@ -210,107 +317,628 @@ function buildChecks({
     )
     .join("; ");
   const expectedComputeOs = template.computeOs ?? null;
+  const textCorpus = estimateTextCorpus(estimate, services);
+  const hasRegionJustification = hasJustification(textCorpus);
+  const edgeExposed = serviceEntries(services).some((service) => EDGE_SERVICE_CODES.has(service.serviceCode));
+  const hasWaf =
+    serviceCodes.includes("awsWAFv2") ||
+    serviceCodes.includes("awsWebApplicationFirewall");
+  const hasCloudWatch = serviceCodes.includes("amazonCloudWatch");
+  const usesPremiumService = serviceDefinitionsForSavedEstimate(services).some((service) =>
+    PREMIUM_SERVICE_IDS.has(service.id),
+  );
 
-  return [
-    makeCheck(
-      "services_present",
-      Object.keys(services).length > 0 ? "pass" : "fail",
-      `Found ${Object.keys(services).length} service entries.`,
+  return {
+    checks: [
+      makeRuleResult({
+        pack: "pricing-integrity",
+        id: "pricing.services-present",
+        title: "Services Present",
+        status: Object.keys(services).length > 0 ? "pass" : "fail",
+        severity: "error",
+        reason: "A saved estimate must contain at least one service.",
+        remediation: "Rebuild the estimate with at least one supported service entry.",
+        details: `Found ${Object.keys(services).length} service entries.`,
+      }),
+      makeRuleResult({
+        pack: "pricing-integrity",
+        id: "pricing.known-service-formulas",
+        title: "Known Service Formulas",
+        status: modeled.unsupportedComparisons.length === 0 ? "pass" : "fail",
+        severity: "error",
+        reason: "Post-save validation needs a formula or parser for every saved service.",
+        remediation: "Add a service parser/model hook or remove unsupported services from the exact path.",
+        details:
+          modeled.unsupportedComparisons.length === 0
+            ? "All saved service entries are covered by modeled pricing formulas."
+            : `Unsupported service formulas: ${unsupportedDetails}.`,
+      }),
+      makeRuleResult({
+        pack: "pricing-integrity",
+        id: "pricing.saved-modeled-parity",
+        title: "Saved vs Modeled Parity",
+        status: modeled.mismatchedComparisons.length === 0 ? "pass" : "fail",
+        severity: "error",
+        reason: "Saved monthly values should match the local pricing model for parity-verified services.",
+        remediation: "Inspect the service serializer and saved estimate shape for AWS-side coercion or drift.",
+        details:
+          modeled.mismatchedComparisons.length === 0
+            ? `Stored monthly ${modeled.storedMonthlyUsd.toFixed(2)} USD matches modeled monthly ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`
+            : mismatchedDetails,
+      }),
+      makeRuleResult({
+        pack: "pricing-integrity",
+        id: "pricing.total-parity",
+        title: "Top-Level Total Parity",
+        status:
+          withinRoundingTolerance(totalMonthlyUsd, modeled.modeledMonthlyUsd)
+            ? "pass"
+            : "fail",
+        severity: "error",
+        reason: "The top-level estimate total should match the modeled service sum.",
+        remediation: "Recompute aggregate estimate totals from the saved services before generating the link.",
+        details: `Top-level total ${totalMonthlyUsd.toFixed(2)} USD vs modeled sum ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
+      }),
+      makeRuleResult({
+        pack: "pricing-integrity",
+        id: "pricing.group-subtotal-parity",
+        title: "Group Subtotal Parity",
+        status:
+          withinRoundingTolerance(groupMonthlyUsd, modeled.modeledMonthlyUsd)
+            ? "pass"
+            : "fail",
+        severity: "error",
+        reason: "The group subtotal should match the modeled service sum.",
+        remediation: "Rebuild group subtotals from the saved service list.",
+        details: `Group subtotal ${groupMonthlyUsd.toFixed(2)} USD vs modeled sum ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
+      }),
+      makeRuleResult({
+        pack: "architecture-completeness",
+        id: "architecture.single-region",
+        title: "Single Region",
+        status: regions.length === 1 ? "pass" : "fail",
+        severity: "error",
+        reason: "Funding-oriented estimates should stay regionally coherent unless multi-region is explicit.",
+        remediation: "Scope the estimate to one region or add explicit multi-region support and justification.",
+        details: regions.length === 0 ? "No regions found." : `Regions: ${regions.join(", ")}.`,
+      }),
+      expectedRegion
+        ? makeRuleResult({
+            pack: "architecture-completeness",
+            id: "architecture.expected-region",
+            title: "Expected Region",
+            status: regions.length === 1 && regions[0] === expectedRegion ? "pass" : "fail",
+            severity: "error",
+            reason: "The saved estimate should match the requested deployment region.",
+            remediation: "Rebuild the estimate in the intended region or correct the requested region.",
+            details: `Expected ${expectedRegion}; found ${regions.join(", ") || "none"}.`,
+          })
+        : makeRuleResult({
+            pack: "architecture-completeness",
+            id: "architecture.expected-region",
+            title: "Expected Region",
+            status: "warning",
+            severity: "warning",
+            blocking: false,
+            reason: "Validation is stronger when the intended region is known.",
+            remediation: "Pass expectedRegion during validation.",
+            details: "No expected region was supplied.",
+          }),
+      makeRuleResult({
+        pack: "architecture-completeness",
+        id: "architecture.required-service-codes",
+        title: "Required Service Codes",
+        status: template.requiredServiceCodes.every((serviceCode) => serviceCodes.includes(serviceCode))
+          ? "pass"
+          : "fail",
+        severity: "error",
+        reason: "Every baseline template requires a minimum set of service families and exact service codes.",
+        remediation: `Ensure the estimate includes ${template.requiredServiceCodes.join(", ")}.`,
+        details: `Required service codes: ${template.requiredServiceCodes.join(", ")}.`,
+      }),
+      makeRuleResult({
+        pack: "architecture-completeness",
+        id: "architecture.required-service-families",
+        title: "Required Service Families",
+        status: blueprint.requiredServiceFamilies.every((family) => serviceFamilies.includes(family))
+          ? "pass"
+          : "fail",
+        severity: "error",
+        reason: "Blueprint-level architecture validation needs the expected service families to be present.",
+        remediation: `Add the missing family or choose a blueprint that matches the saved service mix.`,
+        details: `Required families: ${blueprint.requiredServiceFamilies.join(", ")}. Present families: ${serviceFamilies.join(", ") || "none"}.`,
+      }),
+      makeRuleResult({
+        pack: "architecture-completeness",
+        id: "architecture.environment-coverage",
+        title: "Environment Coverage",
+        status: missingEnvironments.length === 0 ? "pass" : "fail",
+        severity: "error",
+        reason: `The baseline environment model expects ${expectedEnvironments.join(", ")} coverage.`,
+        remediation:
+          "Add the missing environment rows or document why a reduced environment model is justified.",
+        details:
+          missingEnvironments.length === 0
+            ? `Primary services cover ${supportedEnvironments.join(", ")}.`
+            : `Missing environments: ${missingEnvironments.join(", ")}.`,
+      }),
+      expectedComputeOs
+        ? makeRuleResult({
+            pack: "architecture-completeness",
+            id: "architecture.compute-os",
+            title: "Compute OS Matches Blueprint",
+            status:
+              ec2OperatingSystems.length === 1 && ec2OperatingSystems[0] === expectedComputeOs
+                ? "pass"
+                : "fail",
+            severity: "error",
+            reason: "The compute operating system should remain consistent with the selected blueprint.",
+            remediation: "Use the matching blueprint or rebuild the EC2 rows for the intended operating system.",
+            details: `Expected compute OS ${expectedComputeOs}; found ${ec2OperatingSystems.join(", ") || "none"}.`,
+          })
+        : makeRuleResult({
+            pack: "architecture-completeness",
+            id: "architecture.compute-os",
+            title: "Compute OS Matches Blueprint",
+            status: "warning",
+            severity: "warning",
+        blocking: false,
+        reason: "No compute OS expectation was supplied during validation.",
+        remediation: "Pass an explicit blueprint or expected compute OS during validation when compute is present.",
+        details:
+          ec2OperatingSystems.length === 0
+            ? "No EC2 compute rows are present for this blueprint."
+            : "No expected compute OS was supplied.",
+      }),
+      makeRuleResult({
+        pack: "funding-readiness",
+        id: "funding.supportive-spend-threshold",
+        title: "Supportive Spend Threshold",
+        status: supportiveRatio <= template.supportiveMaxRatio ? "pass" : "fail",
+        severity: "error",
+        reason: "Supportive spend should not dominate the estimate.",
+        remediation: "Reduce supportive services or increase primary workload scope.",
+        details: `Supportive spend ${percent(supportiveRatio)} vs max ${percent(template.supportiveMaxRatio)}.`,
+      }),
+      makeRuleResult({
+        pack: "funding-readiness",
+        id: "funding.primary-spend-dominant",
+        title: "Primary Spend Dominant",
+        status: primaryRatio >= template.primaryMinRatio ? "pass" : "fail",
+        severity: "error",
+        reason: "Primary workload spend should remain dominant for funding review.",
+        remediation: "Increase primary workload scope or trim supportive spend.",
+        details: `Primary spend ${percent(primaryRatio)} vs min ${percent(template.primaryMinRatio)}.`,
+      }),
+      expectedMonthlyUsd == null
+        ? makeRuleResult({
+            pack: "funding-readiness",
+            id: "funding.target-band-fit",
+            title: "Target Band Fit",
+            status: "warning",
+            severity: "warning",
+            blocking: false,
+            reason: "Validation is stronger when the target monthly budget is known.",
+            remediation: "Pass expectedMonthlyUsd during validation.",
+            details: "No expected monthly budget was supplied.",
+          })
+        : makeRuleResult({
+            pack: "funding-readiness",
+            id: "funding.target-band-fit",
+            title: "Target Band Fit",
+            status:
+              Math.abs(modeled.modeledMonthlyUsd - expectedMonthlyUsd) <= (toleranceUsd ?? 0)
+                ? "pass"
+                : "fail",
+            severity: "error",
+            reason: "Funding review depends on the estimate landing in an agreed monthly band.",
+            remediation: "Resize the architecture or adjust the target monthly budget with explicit justification.",
+            details: `Expected ${expectedMonthlyUsd.toFixed(2)} USD within +/-${(toleranceUsd ?? 0).toFixed(2)} USD; modeled ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
+          }),
+      regions[0] && regions[0] !== DEFAULT_REGION
+        ? makeRuleResult({
+            pack: "platform-governance",
+            id: "governance.non-default-region-justification",
+            title: "Non-Default Region Justification",
+            status: hasRegionJustification ? "pass" : "fail",
+            severity: "error",
+            reason: "Non-default regions need a clear justification for funding and review.",
+            remediation: "Include residency, regulatory, latency, or compliance justification in the estimate notes or attached SOW.",
+            details: hasRegionJustification
+              ? "A justification marker was found in the estimate text."
+              : `Region ${regions[0]} is outside the default ${DEFAULT_REGION} path and no justification marker was found.`,
+          })
+        : makeRuleResult({
+            pack: "platform-governance",
+            id: "governance.non-default-region-justification",
+            title: "Non-Default Region Justification",
+            status: "pass",
+            severity: "info",
+            blocking: false,
+            reason: "The default region path does not require extra regional justification.",
+            remediation: "None.",
+            details: `Estimate stays on the default region path (${DEFAULT_REGION}).`,
+          }),
+      edgeExposed
+        ? makeRuleResult({
+            pack: "platform-governance",
+            id: "governance.edge-security-controls",
+            title: "Edge Security Controls",
+            status: hasWaf ? "pass" : "warning",
+            severity: hasWaf ? "info" : "warning",
+            blocking: false,
+            reason: "Edge-facing architectures should normally document or include explicit security controls.",
+            remediation: "Add AWS WAF or document where equivalent edge security controls are enforced.",
+            details: hasWaf
+              ? "Edge-facing services include AWS WAF."
+              : "Edge-facing services are present without AWS WAF.",
+          })
+        : makeRuleResult({
+            pack: "platform-governance",
+            id: "governance.edge-security-controls",
+            title: "Edge Security Controls",
+            status: "pass",
+            severity: "info",
+            blocking: false,
+            reason: "No edge-facing services were detected.",
+            remediation: "None.",
+            details: "The saved estimate is not edge-exposed.",
+          }),
+      makeRuleResult({
+        pack: "platform-governance",
+        id: "governance.operational-visibility",
+        title: "Operational Visibility",
+        status: !edgeExposed || hasCloudWatch ? "pass" : "warning",
+        severity: !edgeExposed || hasCloudWatch ? "info" : "warning",
+        blocking: false,
+        reason: "Operational visibility should be present when the estimate includes edge or event-driven components.",
+        remediation: "Add CloudWatch or document equivalent operational visibility controls.",
+        details:
+          !edgeExposed || hasCloudWatch
+            ? "Operational visibility controls are present or not required by the saved service mix."
+            : "Edge-facing services are present without CloudWatch.",
+      }),
+      usesPremiumService
+        ? makeRuleResult({
+            pack: "platform-governance",
+            id: "governance.premium-managed-service-justification",
+            title: "Premium Managed Service Justification",
+            status: hasJustification(textCorpus) ? "pass" : "warning",
+            severity: hasJustification(textCorpus) ? "info" : "warning",
+            blocking: false,
+            reason: "Premium managed services are easier to approve when their value is explicit.",
+            remediation: "Document why the premium managed service is required for the workload.",
+            details: hasJustification(textCorpus)
+              ? "A justification marker was found for premium managed services."
+              : "Premium managed services are present without a clear justification marker.",
+          })
+        : makeRuleResult({
+            pack: "platform-governance",
+            id: "governance.premium-managed-service-justification",
+            title: "Premium Managed Service Justification",
+            status: "pass",
+            severity: "info",
+            blocking: false,
+            reason: "No premium managed services were detected.",
+            remediation: "None.",
+            details: "The saved estimate does not include premium managed services.",
+          }),
+    ],
+    parityDetails: modeled.parityDetails,
+    modeled,
+  };
+}
+
+export function validateArchitectureScenario({ architecture, scenario, draftValidation }) {
+  const supportiveUsd = roundCurrency(
+    scenario.serviceBreakdown
+      .filter((service) => service.supportive)
+      .reduce((sum, service) => sum + service.monthlyUsd, 0),
+  );
+  const supportiveRatio =
+    scenario.modeledMonthlyUsd > 0 ? supportiveUsd / scenario.modeledMonthlyUsd : 0;
+  const requiredServiceIds = architecture.selectedServices
+    .filter((service) => service.required)
+    .map((service) => service.serviceId);
+  const selectedServiceIds = architecture.selectedServices.map((service) => service.serviceId);
+  const blueprint = getBlueprint(architecture.blueprintId);
+  const serviceFamilies = [...new Set(architecture.selectedServices.map((service) => service.category))];
+  const hasJustificationNotes = hasJustification(architecture.notes);
+  const hasWaf = selectedServiceIds.includes("aws-waf-v2");
+  const hasCloudWatch = selectedServiceIds.includes("amazon-cloudwatch");
+  const edgeExposed = architecture.selectedServices.some((service) =>
+    ["application-load-balancer", "amazon-cloudfront", "amazon-api-gateway-http", "amazon-route53"].includes(
+      service.serviceId,
     ),
-    makeCheck(
-      "known_service_formulas",
-      modeled.unsupportedComparisons.length === 0 ? "pass" : "fail",
-      modeled.unsupportedComparisons.length === 0
-        ? "All service entries are covered by modeled pricing formulas."
-        : `Unsupported service formulas: ${unsupportedDetails}.`,
-    ),
-    makeCheck(
-      "stored_costs_match_modeled_costs",
-      modeled.mismatchedComparisons.length === 0 ? "pass" : "fail",
-      modeled.mismatchedComparisons.length === 0
-        ? `Stored monthly ${modeled.storedMonthlyUsd.toFixed(2)} USD matches modeled monthly ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`
-        : mismatchedDetails,
-    ),
-    makeCheck(
-      "total_matches_modeled_sum",
-      Math.abs(totalMonthlyUsd - modeled.modeledMonthlyUsd) <= 0.01 ? "pass" : "fail",
-      `Top-level total ${totalMonthlyUsd.toFixed(2)} USD vs modeled sum ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
-    ),
-    makeCheck(
-      "group_matches_modeled_sum",
-      Math.abs(groupMonthlyUsd - modeled.modeledMonthlyUsd) <= 0.01 ? "pass" : "fail",
-      `Group subtotal ${groupMonthlyUsd.toFixed(2)} USD vs modeled sum ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
-    ),
-    makeCheck(
-      "single_region",
-      regions.length === 1 ? "pass" : "fail",
-      regions.length === 0 ? "No regions found." : `Regions: ${regions.join(", ")}.`,
-    ),
-    expectedRegion
-      ? makeCheck(
-          "expected_region",
-          regions.length === 1 && regions[0] === expectedRegion ? "pass" : "fail",
-          `Expected ${expectedRegion}; found ${regions.join(", ") || "none"}.`,
-        )
-      : makeCheck(
-          "expected_region",
-          "warning",
-          "No expected region was supplied.",
-          false,
-        ),
-    makeCheck(
-      "required_services_present",
-      template.requiredServiceCodes.every((serviceCode) => serviceCodes.includes(serviceCode))
+  );
+  const usesPremiumService = architecture.selectedServices.some((service) =>
+    PREMIUM_SERVICE_IDS.has(service.serviceId),
+  );
+  const checks = [
+    makeRuleResult({
+      pack: "pricing-integrity",
+      id: "pricing.scenario-target-positive",
+      title: "Scenario Target Positive",
+      status: scenario.targetMonthlyUsd > 0 ? "pass" : "fail",
+      severity: "error",
+      reason: "A priced scenario requires a positive target budget.",
+      remediation: "Provide a positive targetMonthlyUsd or adjust the scenario policy.",
+      details: `Scenario target monthly budget is ${scenario.targetMonthlyUsd.toFixed(2)} USD.`,
+    }),
+    makeRuleResult({
+      pack: "pricing-integrity",
+      id: "pricing.scenario-services-present",
+      title: "Scenario Services Present",
+      status: scenario.serviceBreakdown.length > 0 ? "pass" : "fail",
+      severity: "error",
+      reason: "A scenario needs at least one priced service row.",
+      remediation: "Ensure the architecture selects at least one supported service.",
+      details: `Scenario contains ${scenario.serviceBreakdown.length} priced service rows.`,
+    }),
+    scenario.coverage.unavailable.length === 0
+      ? makeRuleResult({
+          pack: "pricing-integrity",
+          id: "pricing.region-service-coverage",
+          title: "Region Service Coverage",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "All selected services are at least modeled in the target region.",
+          remediation: "None.",
+          details: "All selected services are priced or modeled in the selected region.",
+        })
+      : makeRuleResult({
+          pack: "pricing-integrity",
+          id: "pricing.region-service-coverage",
+          title: "Region Service Coverage",
+          status: "fail",
+          severity: "error",
+          reason: "Unavailable services block scenario execution in the selected region.",
+          remediation: "Remove the unavailable services or change region.",
+          details: `Unavailable services in the selected region: ${scenario.coverage.unavailable.join(", ")}.`,
+        }),
+    makeRuleResult({
+      pack: "architecture-completeness",
+      id: "architecture.required-blueprint-services",
+      title: "Required Blueprint Services",
+      status: requiredServiceIds.every((serviceId) => selectedServiceIds.includes(serviceId))
         ? "pass"
         : "fail",
-      `Required service codes: ${template.requiredServiceCodes.join(", ")}.`,
-    ),
-    makeCheck(
-      "environment_coverage",
-      missingEnvironments.length === 0 ? "pass" : "fail",
-      missingEnvironments.length === 0
-        ? `Primary services cover ${supportedEnvironments.join(", ")}.`
-        : `Missing environments: ${missingEnvironments.join(", ")}.`,
-    ),
-    expectedComputeOs
-      ? makeCheck(
-          "compute_os_matches_template",
-          ec2OperatingSystems.length === 1 && ec2OperatingSystems[0] === expectedComputeOs
-            ? "pass"
-            : "fail",
-          `Expected compute OS ${expectedComputeOs}; found ${ec2OperatingSystems.join(", ") || "none"}.`,
-        )
-      : makeCheck(
-          "compute_os_matches_template",
-          "warning",
-          "No expected compute OS was supplied.",
-          false,
-        ),
-    makeCheck(
-      "supportive_spend_reasonable",
-      supportiveRatio <= template.supportiveMaxRatio ? "pass" : "fail",
-      `Supportive spend ${percent(supportiveRatio)} vs max ${percent(template.supportiveMaxRatio)}.`,
-    ),
-    makeCheck(
-      "primary_spend_dominant",
-      primaryRatio >= template.primaryMinRatio ? "pass" : "fail",
-      `Primary spend ${percent(primaryRatio)} vs min ${percent(template.primaryMinRatio)}.`,
-    ),
-    expectedMonthlyUsd == null
-      ? makeCheck(
-          "budget_within_tolerance",
-          "warning",
-          "No expected monthly budget was supplied.",
-          false,
-        )
-      : makeCheck(
-          "budget_within_tolerance",
-          Math.abs(modeled.modeledMonthlyUsd - expectedMonthlyUsd) <= (toleranceUsd ?? 0)
-            ? "pass"
-            : "fail",
-          `Expected ${expectedMonthlyUsd.toFixed(2)} USD within +/-${(toleranceUsd ?? 0).toFixed(2)} USD; modeled ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
-        ),
+      severity: "error",
+      reason: "Each blueprint requires a minimum service set.",
+      remediation: "Add the missing required services or select a different blueprint.",
+      details: `Required services: ${requiredServiceIds.join(", ")}.`,
+    }),
+    makeRuleResult({
+      pack: "architecture-completeness",
+      id: "architecture.required-service-families",
+      title: "Required Service Families",
+      status: blueprint.requiredServiceFamilies.every((family) => serviceFamilies.includes(family))
+        ? "pass"
+        : "fail",
+      severity: "error",
+      reason: "Each blueprint requires a minimum service-family mix.",
+      remediation: "Add the missing service family or choose a blueprint that matches the workload.",
+      details: `Required families: ${blueprint.requiredServiceFamilies.join(", ")}. Present families: ${serviceFamilies.join(", ") || "none"}.`,
+    }),
+    makeRuleResult({
+      pack: "architecture-completeness",
+      id: "architecture.environment-model",
+      title: "Environment Model Present",
+      status: ["dev", "staging", "prod"].every((environment) =>
+        Object.prototype.hasOwnProperty.call(architecture.environmentSplit, environment),
+      )
+        ? "pass"
+        : "fail",
+      severity: "error",
+      reason: "The architecture engine expects a three-environment model unless explicitly changed.",
+      remediation: "Provide dev, staging, and prod environment weights.",
+      details: "Architecture includes the expected three-environment split.",
+    }),
+    (scenario.coverage.exact?.length ?? 0) > 0
+      ? makeRuleResult({
+          pack: "architecture-completeness",
+          id: "architecture.calculator-backed-services",
+          title: "Calculator-Backed Services Present",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "At least one calculator-backed service is present in the scenario.",
+          remediation: "None.",
+          details: `Calculator-backed services: ${scenario.coverage.exact.join(", ")}.`,
+        })
+      : makeRuleResult({
+          pack: "architecture-completeness",
+          id: "architecture.calculator-backed-services",
+          title: "Calculator-Backed Services Present",
+          status: "fail",
+          severity: "error",
+          reason: "An exact calculator flow requires calculator-backed services.",
+          remediation: "Scope the scenario to exact-capable services or add serializer coverage.",
+          details: "No calculator-backed services were selected.",
+        }),
+    makeRuleResult({
+      pack: "funding-readiness",
+      id: "funding.supportive-spend-threshold",
+      title: "Supportive Spend Threshold",
+      status: supportiveRatio <= 0.25 ? "pass" : "warning",
+      severity: supportiveRatio <= 0.25 ? "info" : "warning",
+      blocking: false,
+      reason: "Supportive services should remain proportionate to the primary workload.",
+      remediation: "Trim shared-service overhead or expand the primary workload.",
+      details: `Supportive spend ${percent(supportiveRatio)} of modeled total.`,
+    }),
+    scenario.coverage.modeled.length === 0
+      ? makeRuleResult({
+          pack: "funding-readiness",
+          id: "funding.modeled-service-gaps",
+          title: "Modeled Service Gaps",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "No modeled-only services block exact calculator generation.",
+          remediation: "None.",
+          details: "No modeled-only services block exact calculator generation.",
+        })
+      : makeRuleResult({
+          pack: "funding-readiness",
+          id: "funding.modeled-service-gaps",
+          title: "Modeled Service Gaps",
+          status: "warning",
+          severity: "warning",
+          blocking: false,
+          reason: "Modeled-only services prevent a fully exact calculator link.",
+          remediation: "Scope the scenario to exact services or complete serializer coverage for the modeled services.",
+          details: `Modeled-only services present: ${scenario.coverage.modeled.join(", ")}.`,
+        }),
+    scenario.calculatorEligible
+      ? makeRuleResult({
+          pack: "funding-readiness",
+          id: "funding.calculator-link-ready",
+          title: "Calculator Link Ready",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "The scenario can be turned into an official calculator link.",
+          remediation: "None.",
+          details: "Scenario can be turned into an official calculator link.",
+        })
+      : makeRuleResult({
+          pack: "funding-readiness",
+          id: "funding.calculator-link-ready",
+          title: "Calculator Link Ready",
+          status: "warning",
+          severity: "warning",
+          blocking: false,
+          reason: "The scenario is not yet calculator-link ready.",
+          remediation: "Resolve the calculator blockers or scope the scenario down to an exact-capable subset.",
+          details: scenario.calculatorBlockers.join(" "),
+        }),
+    architecture.region !== DEFAULT_REGION
+      ? makeRuleResult({
+          pack: "platform-governance",
+          id: "governance.non-default-region-justification",
+          title: "Non-Default Region Justification",
+          status: hasJustificationNotes ? "pass" : "warning",
+          severity: hasJustificationNotes ? "info" : "warning",
+          blocking: false,
+          reason: "Non-default regions are easier to approve when the rationale is explicit.",
+          remediation: "Add a residency, latency, compliance, or regulatory justification in the architecture notes.",
+          details: hasJustificationNotes
+            ? "Architecture notes include a region justification marker."
+            : `Architecture targets ${architecture.region} without an explicit justification marker in notes.`,
+        })
+      : makeRuleResult({
+          pack: "platform-governance",
+          id: "governance.non-default-region-justification",
+          title: "Non-Default Region Justification",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "The default region path does not require extra regional justification.",
+          remediation: "None.",
+          details: `Architecture stays on the default region path (${DEFAULT_REGION}).`,
+        }),
+    edgeExposed
+      ? makeRuleResult({
+          pack: "platform-governance",
+          id: "governance.edge-security-controls",
+          title: "Edge Security Controls",
+          status: hasWaf ? "pass" : "warning",
+          severity: hasWaf ? "info" : "warning",
+          blocking: false,
+          reason: "Edge-facing designs should normally include WAF or equivalent controls.",
+          remediation: "Add aws-waf-v2 or document equivalent edge security controls.",
+          details: hasWaf
+            ? "Edge-facing services include aws-waf-v2."
+            : "Edge-facing services are present without aws-waf-v2.",
+        })
+      : makeRuleResult({
+          pack: "platform-governance",
+          id: "governance.edge-security-controls",
+          title: "Edge Security Controls",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "No edge-facing services were selected.",
+          remediation: "None.",
+          details: "The architecture is not edge-exposed.",
+        }),
+    makeRuleResult({
+      pack: "platform-governance",
+      id: "governance.operational-visibility",
+      title: "Operational Visibility",
+      status: !edgeExposed || hasCloudWatch ? "pass" : "warning",
+      severity: !edgeExposed || hasCloudWatch ? "info" : "warning",
+      blocking: false,
+      reason: "Operational visibility should be explicit for edge and event-driven designs.",
+      remediation: "Add amazon-cloudwatch or document equivalent observability controls.",
+      details:
+        !edgeExposed || hasCloudWatch
+          ? "Operational visibility controls are present or not required by the design."
+          : "Edge-facing services are present without amazon-cloudwatch.",
+    }),
+    usesPremiumService
+      ? makeRuleResult({
+          pack: "platform-governance",
+          id: "governance.premium-managed-service-justification",
+          title: "Premium Managed Service Justification",
+          status: hasJustificationNotes ? "pass" : "warning",
+          severity: hasJustificationNotes ? "info" : "warning",
+          blocking: false,
+          reason: "Premium managed services should have an explicit value justification.",
+          remediation: "Document the reason for the premium managed service in the architecture notes.",
+          details: hasJustificationNotes
+            ? "Architecture notes include a premium service justification marker."
+            : "Premium managed services are selected without an explicit justification marker in notes.",
+        })
+      : makeRuleResult({
+          pack: "platform-governance",
+          id: "governance.premium-managed-service-justification",
+          title: "Premium Managed Service Justification",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "No premium managed services were selected.",
+          remediation: "None.",
+          details: "The architecture does not include premium managed services.",
+        }),
   ];
+
+  if (draftValidation) {
+    checks.push(
+      draftValidation.passed
+        ? makeRuleResult({
+            pack: "pricing-integrity",
+            id: "pricing.core-preview-valid",
+            title: "Core Preview Valid",
+            status: "pass",
+            severity: "info",
+            blocking: false,
+            reason: "The core exact estimate preview validated before save.",
+            remediation: "None.",
+            details: "Core template preview validates successfully before save.",
+          })
+        : makeRuleResult({
+            pack: "pricing-integrity",
+            id: "pricing.core-preview-valid",
+            title: "Core Preview Valid",
+            status: "fail",
+            severity: "error",
+            reason: "The core exact estimate preview failed validation before save.",
+            remediation: "Inspect the core estimate payload and fix the failing preview rules.",
+            details: draftValidation.hardFailures.join(" "),
+          }),
+    );
+  }
+
+  return summarizeValidation({
+    checks,
+    assumptions: [
+      `Scenario '${scenario.id}' uses the normalized architecture '${architecture.blueprintId}'.`,
+    ],
+    parityDetails: draftValidation?.parityDetails ?? [],
+  });
 }
 
 export function validateEstimatePayload({
@@ -323,21 +951,16 @@ export function validateEstimatePayload({
   const services = estimate?.services ?? {};
   const inferredTemplateId = templateId ?? inferTemplateIdFromServices(services);
   const template = getTemplate(inferredTemplateId);
-  const checks = buildChecks({
+  const blueprint = getBlueprint(resolveBlueprintIdForTemplate(template.id));
+  const { checks, parityDetails, modeled } = buildSavedEstimateChecks({
     estimate,
     services,
     template,
+    blueprint,
     expectedMonthlyUsd,
     expectedRegion,
     budgetTolerancePct,
   });
-  const modeling = summarizeModeling(services);
-  const hardFailures = checks
-    .filter((check) => check.status === "fail" && check.blocking)
-    .map((check) => `${check.name}: ${check.details}`);
-  const warnings = checks
-    .filter((check) => check.status === "warning")
-    .map((check) => `${check.name}: ${check.details}`);
   const assumptions = [];
 
   if (!templateId) {
@@ -354,20 +977,25 @@ export function validateEstimatePayload({
     assumptions.push("Target monthly budget was not supplied during validation.");
   }
 
+  const summary = summarizeValidation({
+    checks,
+    assumptions,
+    parityDetails,
+  });
+
   return {
+    schemaVersion: VALIDATION_SCHEMA_VERSION,
+    blueprintId: blueprint.id,
+    blueprintTitle: blueprint.title,
     templateId: template.id,
     templateTitle: template.title,
     expectedMonthlyUsd:
       expectedMonthlyUsd == null ? null : roundCurrency(Number(expectedMonthlyUsd)),
-    storedMonthlyUsd: modeling.storedMonthlyUsd,
-    modeledMonthlyUsd: modeling.modeledMonthlyUsd,
+    storedMonthlyUsd: modeled.storedMonthlyUsd,
+    modeledMonthlyUsd: modeled.modeledMonthlyUsd,
     expectedRegion: expectedRegion ?? null,
     regions: regionsFor(services),
     serviceCodes: serviceCodesFor(services),
-    checks,
-    hardFailures,
-    warnings,
-    assumptions,
-    passed: hardFailures.length === 0,
+    ...summary,
   };
 }

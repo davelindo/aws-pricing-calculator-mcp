@@ -7,7 +7,39 @@ export const ENVIRONMENTS = ["dev", "staging", "prod"];
 const HOURS_PER_MONTH = 730;
 const REGION_NAMES = {
   "us-east-1": "US East (N. Virginia)",
+  "ca-central-1": "Canada (Central)",
+  "sa-east-1": "South America (Sao Paulo)",
+  "eu-west-1": "Europe (Ireland)",
+  "ap-southeast-2": "Asia Pacific (Sydney)",
+  "ap-northeast-2": "Asia Pacific (Seoul)",
 };
+
+const REGION_PRICE_MULTIPLIERS = {
+  "us-east-1": 1,
+  "ca-central-1": 1.09,
+  "sa-east-1": 1.32,
+  "eu-west-1": 1.11,
+  "ap-southeast-2": 1.18,
+  "ap-northeast-2": 1.16,
+};
+
+function deepScalePricing(value, multiplier) {
+  if (typeof value === "number") {
+    return Math.round((value * multiplier + Number.EPSILON) * 1_000_000_000_000) / 1_000_000_000_000;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => deepScalePricing(entry, multiplier));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, deepScalePricing(entry, multiplier)]),
+    );
+  }
+
+  return value;
+}
 
 const PRICING = {
   "us-east-1": {
@@ -64,6 +96,20 @@ const PRICING = {
 const COMPUTE_INSTANCE_OPTIONS = {
   linux: ["m6i.large", "m6i.xlarge", "m6i.2xlarge"],
   windows: ["m6i.large", "m6i.xlarge", "m6i.2xlarge"],
+};
+
+const EC2_PRICING_STRATEGY_MULTIPLIERS = {
+  "on-demand": 1,
+  "savings-plans": 0.86,
+  "reserved": 0.82,
+  "reserved-heavy": 0.76,
+  spot: 0.58,
+};
+
+const RDS_PRICING_MODEL_MULTIPLIERS = {
+  OnDemand: 1,
+  Reserved: 0.9,
+  ReservedHeavy: 0.84,
 };
 
 const RDS_TIER_PROFILES = [
@@ -228,9 +274,16 @@ export function pricingFor(region) {
   const pricing = PRICING[region];
 
   if (!pricing) {
-    throw new Error(
-      `Unsupported region '${region}'. Supported regions: ${Object.keys(PRICING).join(", ")}.`,
-    );
+    const basePricing = PRICING["us-east-1"];
+    const multiplier = REGION_PRICE_MULTIPLIERS[region];
+
+    if (!basePricing || !multiplier) {
+      throw new Error(
+        `Unsupported region '${region}'. Supported regions: ${Object.keys(REGION_PRICE_MULTIPLIERS).join(", ")}.`,
+      );
+    }
+
+    return deepScalePricing(basePricing, multiplier);
   }
 
   return pricing;
@@ -291,7 +344,7 @@ function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-function selectedRdsTier(targetMonthlyUsd) {
+export function selectedRdsTier(targetMonthlyUsd) {
   return RDS_TIER_PROFILES.find((tier) => targetMonthlyUsd <= tier.maxBudgetUsd) ?? RDS_TIER_PROFILES.at(-1);
 }
 
@@ -315,6 +368,10 @@ function ec2MonthlyRate(region, operatingSystem, instanceType) {
 
 export function modelEc2MonthlyUsd(region, operatingSystem, instanceType, instanceCount) {
   return roundCurrency(ec2MonthlyRate(region, operatingSystem, instanceType) * instanceCount);
+}
+
+export function ec2PricingStrategyMultiplier(selectedOption) {
+  return EC2_PRICING_STRATEGY_MULTIPLIERS[selectedOption] ?? 1;
 }
 
 function rdsInstanceHourlyRate(region, instanceType, deploymentOption) {
@@ -347,6 +404,10 @@ export function modelRdsMonthlyUsd(region, instanceType, deploymentOption, stora
   return roundCurrency(instanceMonthly * nodeCount + storageMonthly);
 }
 
+export function rdsPricingModelMultiplier(termType) {
+  return RDS_PRICING_MODEL_MULTIPLIERS[termType] ?? 1;
+}
+
 export function modelNatMonthlyUsd(
   region,
   regionalNatGatewayCount,
@@ -370,11 +431,23 @@ function targetSupportiveBudget(template, targetMonthlyUsd) {
   );
 }
 
-function buildNatPlan(template, region, targetMonthlyUsd) {
+export function buildNatPlan(
+  template,
+  region,
+  targetMonthlyUsd,
+  {
+    sharedServicesMultiplier = 1,
+    dataTransferMultiplier = 1,
+  } = {},
+) {
   const regionalNatGatewayCount = 1;
   const regionalNatGatewayAzCount = 2;
   const monthlyBase = modelNatMonthlyUsd(region, regionalNatGatewayCount, regionalNatGatewayAzCount, 0);
-  const targetBudget = targetSupportiveBudget(template, targetMonthlyUsd);
+  const targetBudget = roundCurrency(
+    targetSupportiveBudget(template, targetMonthlyUsd) *
+      sharedServicesMultiplier *
+      dataTransferMultiplier,
+  );
   const requiredDataBudget = Math.max(0, targetBudget - monthlyBase);
   const dataProcessedGb = Math.max(
     1_000,
@@ -394,7 +467,7 @@ function buildNatPlan(template, region, targetMonthlyUsd) {
   };
 }
 
-function rdsPlanMonthlyUsd(region, tier) {
+export function rdsPlanMonthlyUsd(region, tier) {
   return roundCurrency(
     tier.envs.reduce(
       (sum, environmentPlan) =>
@@ -432,7 +505,7 @@ function chooseComputeInstanceType(region, operatingSystem, targetComputeBudgetU
   return candidates[0];
 }
 
-function buildComputePlan(region, operatingSystem, targetComputeBudgetUsd, environmentSplit) {
+export function buildComputePlan(region, operatingSystem, targetComputeBudgetUsd, environmentSplit) {
   if (targetComputeBudgetUsd <= 0) {
     throw new Error("Target compute budget must be positive.");
   }
@@ -478,7 +551,7 @@ export function parseEnvironmentTag(description) {
   return match ? match[1].toLowerCase() : null;
 }
 
-function buildEksService(environment, region, notes) {
+export function buildEksService(environment, region, notes) {
   const monthlyUsd = modelEksMonthlyUsd(region, 1);
 
   return {
@@ -519,13 +592,35 @@ function buildEksService(environment, region, notes) {
   };
 }
 
-function buildEc2Service(environment, region, operatingSystem, instanceType, instanceCount, notes) {
-  const monthlyUsd = modelEc2MonthlyUsd(region, operatingSystem, instanceType, instanceCount);
+export function buildEc2Service(
+  environment,
+  region,
+  operatingSystem,
+  instanceType,
+  instanceCount,
+  notes,
+  pricingStrategy = {},
+) {
+  const selectedPricingStrategy = pricingStrategy.selectedOption ?? "on-demand";
+  const pricingMultiplier = ec2PricingStrategyMultiplier(selectedPricingStrategy);
+  const monthlyUsd = roundCurrency(
+    modelEc2MonthlyUsd(region, operatingSystem, instanceType, instanceCount) * pricingMultiplier,
+  );
   const osLabel = operatingSystem === "windows" ? "Windows Server" : "Linux";
   const metadata =
     operatingSystem === "windows"
       ? SERVICE_ROLE_METADATA.ec2Windows
       : SERVICE_ROLE_METADATA.ec2Linux;
+  const pricingLabel =
+    selectedPricingStrategy === "savings-plans"
+      ? "Savings Plans"
+      : selectedPricingStrategy === "reserved"
+        ? "Reserved"
+        : selectedPricingStrategy === "reserved-heavy"
+          ? "Reserved Heavy"
+          : selectedPricingStrategy === "spot"
+            ? "Spot"
+            : "On-Demand";
 
   return {
     key: randomServiceKey("ec2Enhancement", environment),
@@ -590,9 +685,9 @@ function buildEc2Service(environment, region, operatingSystem, instanceType, ins
         },
         pricingStrategy: {
           value: {
-            selectedOption: "on-demand",
-            term: "1 year",
-            utilizationValue: "100",
+            selectedOption: selectedPricingStrategy,
+            term: pricingStrategy.term ?? "1 year",
+            utilizationValue: String(pricingStrategy.utilizationValue ?? "100"),
             utilizationUnit: "%Utilized/Month",
           },
         },
@@ -604,7 +699,7 @@ function buildEc2Service(environment, region, operatingSystem, instanceType, ins
       description: buildDescription(
         `Amazon EC2 ${operatingSystem === "windows" ? "Windows" : "Linux"} worker baseline.`,
         environment,
-        `${instanceCount} ${instanceType} instances.`,
+        `${instanceCount} ${instanceType} instances with ${pricingLabel} pricing.`,
         notes,
       ),
       serviceCost: {
@@ -613,13 +708,30 @@ function buildEc2Service(environment, region, operatingSystem, instanceType, ins
       },
       serviceName: "Amazon EC2",
       regionName: regionNameFor(region),
-      configSummary: `Tenancy (Shared Instances), Operating system (${osLabel}), Workload (Consistent, Number of instances: ${instanceCount}), Advance EC2 instance (${instanceType}), Pricing strategy (On-Demand Utilization: 100 %Utilized/Month), Enable monitoring (disabled), DT Inbound: Not selected (0 TB per month), DT Outbound: Not selected (0 TB per month), DT Intra-Region: (0 TB per month)`,
+      configSummary: `Tenancy (Shared Instances), Operating system (${osLabel}), Workload (Consistent, Number of instances: ${instanceCount}), Advance EC2 instance (${instanceType}), Pricing strategy (${pricingLabel} Utilization: ${pricingStrategy.utilizationValue ?? "100"} %Utilized/Month), Enable monitoring (disabled), DT Inbound: Not selected (0 TB per month), DT Outbound: Not selected (0 TB per month), DT Intra-Region: (0 TB per month)`,
     },
   };
 }
 
-function buildRdsService(environment, region, instanceType, deploymentOption, storageGb, notes) {
-  const monthlyUsd = modelRdsMonthlyUsd(region, instanceType, deploymentOption, storageGb);
+export function buildRdsService(
+  environment,
+  region,
+  instanceType,
+  deploymentOption,
+  storageGb,
+  notes,
+  pricingModel = "OnDemand",
+) {
+  const monthlyUsd = roundCurrency(
+    modelRdsMonthlyUsd(region, instanceType, deploymentOption, storageGb) *
+      rdsPricingModelMultiplier(pricingModel),
+  );
+  const pricingLabel =
+    pricingModel === "ReservedHeavy"
+      ? "Reserved Heavy"
+      : pricingModel === "Reserved"
+        ? "Reserved"
+        : "OnDemand";
 
   return {
     key: randomServiceKey("amazonRDSPostgreSQLDB", environment),
@@ -672,7 +784,7 @@ function buildRdsService(environment, region, instanceType, deploymentOption, st
                 value: deploymentOption,
               },
               TermType: {
-                value: "OnDemand",
+                value: pricingModel,
               },
             },
           ],
@@ -685,7 +797,7 @@ function buildRdsService(environment, region, instanceType, deploymentOption, st
       description: buildDescription(
         "Amazon RDS for PostgreSQL baseline.",
         environment,
-        `${instanceType} with ${deploymentOption} and ${storageGb} GB of storage.`,
+        `${instanceType} with ${deploymentOption}, ${storageGb} GB of storage, and ${pricingLabel} pricing.`,
         notes,
       ),
       serviceCost: {
@@ -694,12 +806,12 @@ function buildRdsService(environment, region, instanceType, deploymentOption, st
       },
       serviceName: "Amazon RDS for PostgreSQL",
       regionName: regionNameFor(region),
-      configSummary: `Storage amount (${storageGb} GB), Storage volume (General Purpose SSD (gp2)), Nodes (1), Instance Type (${instanceType}), Utilization (On-Demand only) (100 %Utilized/Month), Deployment Option (${deploymentOption}), Pricing Model (OnDemand)`,
+      configSummary: `Storage amount (${storageGb} GB), Storage volume (General Purpose SSD (gp2)), Nodes (1), Instance Type (${instanceType}), Utilization (${pricingLabel}) (100 %Utilized/Month), Deployment Option (${deploymentOption}), Pricing Model (${pricingModel})`,
     },
   };
 }
 
-function buildNatService(region, natPlan, notes) {
+export function buildNatService(region, natPlan, notes) {
   const monthlyUsd = natPlan.monthlyUsd;
 
   return {

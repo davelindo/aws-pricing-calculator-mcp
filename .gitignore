@@ -2,3 +2,5 @@ node_modules/
 .DS_Store
 coverage/
 npm-debug.log*
+ROADMAP.md
+ROADMAP.local.md

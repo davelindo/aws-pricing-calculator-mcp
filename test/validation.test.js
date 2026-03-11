@@ -1,15 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createModeledEstimate } from "../src/planner.js";
+import {
+  buildCalculatorEstimateFromScenario,
+  priceArchitecture,
+} from "../src/planner.js";
 import { validateEstimatePayload } from "../src/validation.js";
+import { getScenario } from "../test-support/helpers.js";
 
-test("validateEstimatePayload passes for a modeled estimate", () => {
-  const created = createModeledEstimate({
-    templateId: "eks-rds-standard",
-    targetMonthlyUsd: 7000,
-    clientName: "ExampleCo",
+function buildExactContainerEstimate(targetMonthlyUsd = 7000) {
+  const priced = priceArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd,
+    includeDefaultAddOns: false,
   });
+  const baseline = getScenario(priced);
+
+  return buildCalculatorEstimateFromScenario({
+    pricedScenario: baseline,
+  });
+}
+
+test("validateEstimatePayload passes for an exact scenario-backed estimate", () => {
+  const created = buildExactContainerEstimate();
 
   const validation = validateEstimatePayload({
     estimate: created.estimate,
@@ -20,13 +34,19 @@ test("validateEstimatePayload passes for a modeled estimate", () => {
 
   assert.equal(validation.passed, true);
   assert.equal(validation.hardFailures.length, 0);
+  assert.equal(validation.schemaVersion, "4.0");
+  assert.ok(validation.parityDetails.length > 0);
+  assert.ok(validation.packs.some((pack) => pack.id === "platform-governance"));
+  assert.ok(validation.checks.some((check) => check.id === "pricing.saved-modeled-parity"));
+  assert.ok(
+    validation.checks.every(
+      (check) => typeof check.title === "string" && typeof check.remediation === "string",
+    ),
+  );
 });
 
 test("validateEstimatePayload fails when stored totals drift from modeled totals", () => {
-  const created = createModeledEstimate({
-    templateId: "linux-heavy",
-    targetMonthlyUsd: 5000,
-  });
+  const created = buildExactContainerEstimate(5000);
   const estimate = structuredClone(created.estimate);
   const firstKey = Object.keys(estimate.services)[0];
 
@@ -36,23 +56,35 @@ test("validateEstimatePayload fails when stored totals drift from modeled totals
 
   const validation = validateEstimatePayload({
     estimate,
-    templateId: "linux-heavy",
+    templateId: "eks-rds-standard",
     expectedMonthlyUsd: 5000,
     expectedRegion: "us-east-1",
   });
 
   assert.equal(validation.passed, false);
   assert.ok(
-    validation.hardFailures.some((failure) =>
-      failure.startsWith("stored_costs_match_modeled_costs:"),
+    validation.blockingFailures.some((failure) => failure.id === "pricing.saved-modeled-parity"),
+  );
+  assert.ok(
+    validation.blockingFailures.every(
+      (failure) =>
+        typeof failure.title === "string" &&
+        typeof failure.details === "string" &&
+        typeof failure.remediation === "string",
     ),
   );
 });
 
 test("validateEstimatePayload infers windows-heavy from saved services", () => {
-  const created = createModeledEstimate({
-    templateId: "windows-heavy",
+  const priced = priceArchitecture({
+    blueprintId: "windows-app-stack",
+    region: "us-east-1",
     targetMonthlyUsd: 6000,
+    includeDefaultAddOns: false,
+  });
+  const baseline = getScenario(priced);
+  const created = buildCalculatorEstimateFromScenario({
+    pricedScenario: baseline,
   });
 
   const validation = validateEstimatePayload({
@@ -64,6 +96,31 @@ test("validateEstimatePayload infers windows-heavy from saved services", () => {
   assert.ok(
     validation.assumptions.some((assumption) =>
       assumption.includes("Template was inferred as 'windows-heavy'"),
+    ),
+  );
+});
+
+test("validateEstimatePayload infers enterprise-data-lake-standard from lake services", () => {
+  const priced = priceArchitecture({
+    blueprintId: "enterprise-data-lake",
+    region: "us-east-1",
+    targetMonthlyUsd: 25000,
+    serviceIds: ["amazon-kinesis-firehose"],
+  });
+  const baseline = getScenario(priced);
+  const created = buildCalculatorEstimateFromScenario({
+    pricedScenario: baseline,
+  });
+
+  const validation = validateEstimatePayload({
+    estimate: created.estimate,
+  });
+
+  assert.equal(validation.templateId, "enterprise-data-lake-standard");
+  assert.equal(validation.passed, true);
+  assert.ok(
+    validation.assumptions.some((assumption) =>
+      assumption.includes("Template was inferred as 'enterprise-data-lake-standard'"),
     ),
   );
 });
