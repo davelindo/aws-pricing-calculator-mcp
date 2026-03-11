@@ -43,6 +43,11 @@ test("validateEstimatePayload passes for an exact scenario-backed estimate", () 
       (check) => typeof check.title === "string" && typeof check.remediation === "string",
     ),
   );
+  const savedParity = validation.checks.find((check) => check.id === "pricing.saved-modeled-parity");
+  const regionCheck = validation.checks.find((check) => check.id === "architecture.expected-region");
+
+  assert.equal(savedParity?.evidence?.kind, "parity_summary");
+  assert.equal(regionCheck?.evidence?.kind, "expected_found");
 });
 
 test("validateEstimatePayload fails when stored totals drift from modeled totals", () => {
@@ -123,4 +128,22 @@ test("validateEstimatePayload infers streaming-data-platform-standard when fireh
       assumption.includes("Template was inferred as 'streaming-data-platform-standard'"),
     ),
   );
+});
+
+test("scenario validation emits typed evidence for key architecture and funding checks", () => {
+  const priced = priceArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 7000,
+  });
+  const baseline = getScenario(priced);
+  const blueprintServices = baseline.validation.checks.find(
+    (check) => check.id === "architecture.required-blueprint-services",
+  );
+  const calculatorReady = baseline.validation.checks.find(
+    (check) => check.id === "funding.calculator-link-ready",
+  );
+
+  assert.equal(blueprintServices?.evidence?.kind, "required_present_missing");
+  assert.equal(calculatorReady?.evidence?.kind, "state_summary");
 });

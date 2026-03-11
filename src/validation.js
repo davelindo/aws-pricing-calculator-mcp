@@ -182,6 +182,67 @@ function withinRoundingTolerance(left, right) {
   return roundCurrency(Math.abs(Number(left ?? 0) - Number(right ?? 0))) <= ROUNDING_TOLERANCE_USD;
 }
 
+function stringSetEvidence(label, values) {
+  return {
+    kind: "string_set",
+    label,
+    values: [...values],
+  };
+}
+
+function requiredPresentMissingEvidence(label, required, present) {
+  const presentSet = new Set(present);
+
+  return {
+    kind: "required_present_missing",
+    label,
+    required: [...required],
+    present: [...present],
+    missing: required.filter((value) => !presentSet.has(value)),
+  };
+}
+
+function numericComparisonEvidence(metric, actual, expected, { comparator, tolerance = null, unit }) {
+  return {
+    kind: "numeric_comparison",
+    metric,
+    actual,
+    expected,
+    comparator,
+    tolerance,
+    unit,
+  };
+}
+
+function expectedFoundEvidence(label, expected, found) {
+  return {
+    kind: "expected_found",
+    label,
+    expected,
+    found: [...found],
+  };
+}
+
+function paritySummaryEvidence({ modeled, groupMonthlyUsd = null }) {
+  return {
+    kind: "parity_summary",
+    storedMonthlyUsd: modeled.storedMonthlyUsd,
+    modeledMonthlyUsd: modeled.modeledMonthlyUsd,
+    groupMonthlyUsd,
+    mismatchedServiceCodes: modeled.mismatchedComparisons.map((comparison) => comparison.serviceCode),
+    unsupportedServiceCodes: modeled.unsupportedComparisons.map((comparison) => comparison.serviceCode),
+  };
+}
+
+function stateSummaryEvidence(label, state, values = []) {
+  return {
+    kind: "state_summary",
+    label,
+    state,
+    values: [...values],
+  };
+}
+
 function makeRuleResult({
   pack,
   id,
@@ -371,6 +432,10 @@ function buildSavedEstimateChecks({
         reason: "A saved estimate must contain at least one service.",
         remediation: "Rebuild the estimate with at least one supported service entry.",
         details: `Found ${Object.keys(services).length} service entries.`,
+        evidence: numericComparisonEvidence("service_entries", Object.keys(services).length, 1, {
+          comparator: "gte",
+          unit: "count",
+        }),
       }),
       makeRuleResult({
         pack: "pricing-integrity",
@@ -384,6 +449,7 @@ function buildSavedEstimateChecks({
           modeled.unsupportedComparisons.length === 0
             ? "All saved service entries are covered by modeled pricing formulas."
             : `Unsupported service formulas: ${unsupportedDetails}.`,
+        evidence: paritySummaryEvidence({ modeled }),
       }),
       makeRuleResult({
         pack: "pricing-integrity",
@@ -397,6 +463,7 @@ function buildSavedEstimateChecks({
           modeled.mismatchedComparisons.length === 0
             ? `Stored monthly ${modeled.storedMonthlyUsd.toFixed(2)} USD matches modeled monthly ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`
             : mismatchedDetails,
+        evidence: paritySummaryEvidence({ modeled }),
       }),
       makeRuleResult({
         pack: "pricing-integrity",
@@ -410,6 +477,16 @@ function buildSavedEstimateChecks({
         reason: "The top-level estimate total should match the modeled service sum.",
         remediation: "Recompute aggregate estimate totals from the saved services before generating the link.",
         details: `Top-level total ${totalMonthlyUsd.toFixed(2)} USD vs modeled sum ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
+        evidence: numericComparisonEvidence(
+          "estimate_total_monthly_usd",
+          totalMonthlyUsd,
+          modeled.modeledMonthlyUsd,
+          {
+            comparator: "eq",
+            tolerance: ROUNDING_TOLERANCE_USD,
+            unit: "usd",
+          },
+        ),
       }),
       makeRuleResult({
         pack: "pricing-integrity",
@@ -423,6 +500,16 @@ function buildSavedEstimateChecks({
         reason: "The group subtotal should match the modeled service sum.",
         remediation: "Rebuild group subtotals from the saved service list.",
         details: `Group subtotal ${groupMonthlyUsd.toFixed(2)} USD vs modeled sum ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
+        evidence: numericComparisonEvidence(
+          "group_subtotal_monthly_usd",
+          groupMonthlyUsd,
+          modeled.modeledMonthlyUsd,
+          {
+            comparator: "eq",
+            tolerance: ROUNDING_TOLERANCE_USD,
+            unit: "usd",
+          },
+        ),
       }),
       makeRuleResult({
         pack: "architecture-completeness",
@@ -433,6 +520,7 @@ function buildSavedEstimateChecks({
         reason: "Funding-oriented estimates should stay regionally coherent unless multi-region is explicit.",
         remediation: "Scope the estimate to one region or add explicit multi-region support and justification.",
         details: regions.length === 0 ? "No regions found." : `Regions: ${regions.join(", ")}.`,
+        evidence: stringSetEvidence("regions", regions),
       }),
       expectedRegion
         ? makeRuleResult({
@@ -444,6 +532,7 @@ function buildSavedEstimateChecks({
             reason: "The saved estimate should match the requested deployment region.",
             remediation: "Rebuild the estimate in the intended region or correct the requested region.",
             details: `Expected ${expectedRegion}; found ${regions.join(", ") || "none"}.`,
+            evidence: expectedFoundEvidence("region", expectedRegion, regions),
           })
         : makeRuleResult({
             pack: "architecture-completeness",
@@ -455,6 +544,7 @@ function buildSavedEstimateChecks({
             reason: "Validation is stronger when the intended region is known.",
             remediation: "Pass expectedRegion during validation.",
             details: "No expected region was supplied.",
+            evidence: null,
           }),
       makeRuleResult({
         pack: "architecture-completeness",
@@ -467,6 +557,11 @@ function buildSavedEstimateChecks({
         reason: "Every baseline template requires a minimum set of service families and exact service codes.",
         remediation: `Ensure the estimate includes ${template.requiredServiceCodes.join(", ")}.`,
         details: `Required service codes: ${template.requiredServiceCodes.join(", ")}.`,
+        evidence: requiredPresentMissingEvidence(
+          "required_service_codes",
+          template.requiredServiceCodes,
+          serviceCodes,
+        ),
       }),
       makeRuleResult({
         pack: "architecture-completeness",
@@ -479,6 +574,11 @@ function buildSavedEstimateChecks({
         reason: "Blueprint-level architecture validation needs the expected service families to be present.",
         remediation: `Add the missing family or choose a blueprint that matches the saved service mix.`,
         details: `Required families: ${blueprint.requiredServiceFamilies.join(", ")}. Present families: ${serviceFamilies.join(", ") || "none"}.`,
+        evidence: requiredPresentMissingEvidence(
+          "required_service_families",
+          blueprint.requiredServiceFamilies,
+          serviceFamilies,
+        ),
       }),
       makeRuleResult({
         pack: "architecture-completeness",
@@ -493,6 +593,11 @@ function buildSavedEstimateChecks({
           missingEnvironments.length === 0
             ? `Primary services cover ${supportedEnvironments.join(", ")}.`
             : `Missing environments: ${missingEnvironments.join(", ")}.`,
+        evidence: requiredPresentMissingEvidence(
+          "environment_coverage",
+          expectedEnvironments,
+          supportedEnvironments,
+        ),
       }),
       expectedComputeOs
         ? makeRuleResult({
@@ -507,6 +612,7 @@ function buildSavedEstimateChecks({
             reason: "The compute operating system should remain consistent with the selected blueprint.",
             remediation: "Use the matching blueprint or rebuild the EC2 rows for the intended operating system.",
             details: `Expected compute OS ${expectedComputeOs}; found ${ec2OperatingSystems.join(", ") || "none"}.`,
+            evidence: expectedFoundEvidence("compute_os", expectedComputeOs, ec2OperatingSystems),
           })
         : makeRuleResult({
             pack: "architecture-completeness",
@@ -531,6 +637,10 @@ function buildSavedEstimateChecks({
         reason: "Supportive spend should not dominate the estimate.",
         remediation: "Reduce supportive services or increase primary workload scope.",
         details: `Supportive spend ${percent(supportiveRatio)} vs max ${percent(template.supportiveMaxRatio)}.`,
+        evidence: numericComparisonEvidence("supportive_spend_ratio", supportiveRatio, template.supportiveMaxRatio, {
+          comparator: "lte",
+          unit: "ratio",
+        }),
       }),
       makeRuleResult({
         pack: "funding-readiness",
@@ -541,6 +651,10 @@ function buildSavedEstimateChecks({
         reason: "Primary workload spend should remain dominant for funding review.",
         remediation: "Increase primary workload scope or trim supportive spend.",
         details: `Primary spend ${percent(primaryRatio)} vs min ${percent(template.primaryMinRatio)}.`,
+        evidence: numericComparisonEvidence("primary_spend_ratio", primaryRatio, template.primaryMinRatio, {
+          comparator: "gte",
+          unit: "ratio",
+        }),
       }),
       expectedMonthlyUsd == null
         ? makeRuleResult({
@@ -566,6 +680,16 @@ function buildSavedEstimateChecks({
             reason: "Funding review depends on the estimate landing in an agreed monthly band.",
             remediation: "Resize the architecture or adjust the target monthly budget with explicit justification.",
             details: `Expected ${expectedMonthlyUsd.toFixed(2)} USD within +/-${(toleranceUsd ?? 0).toFixed(2)} USD; modeled ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
+            evidence: numericComparisonEvidence(
+              "target_monthly_usd",
+              modeled.modeledMonthlyUsd,
+              expectedMonthlyUsd,
+              {
+                comparator: "band",
+                tolerance: toleranceUsd ?? 0,
+                unit: "usd",
+              },
+            ),
           }),
       regions[0] && regions[0] !== DEFAULT_REGION
         ? makeRuleResult({
@@ -579,6 +703,11 @@ function buildSavedEstimateChecks({
             details: hasRegionJustification
               ? "A justification marker was found in the estimate text."
               : `Region ${regions[0]} is outside the default ${DEFAULT_REGION} path and no justification marker was found.`,
+            evidence: stateSummaryEvidence(
+              "non_default_region_justification",
+              hasRegionJustification ? "justified" : "missing-justification",
+              [regions[0]],
+            ),
           })
         : makeRuleResult({
             pack: "platform-governance",
@@ -590,6 +719,11 @@ function buildSavedEstimateChecks({
             reason: "The default region path does not require extra regional justification.",
             remediation: "None.",
             details: `Estimate stays on the default region path (${DEFAULT_REGION}).`,
+            evidence: stateSummaryEvidence(
+              "non_default_region_justification",
+              "default-region",
+              [DEFAULT_REGION],
+            ),
           }),
       edgeExposed
         ? makeRuleResult({
@@ -604,6 +738,11 @@ function buildSavedEstimateChecks({
             details: hasWaf
               ? "Edge-facing services include AWS WAF."
               : "Edge-facing services are present without AWS WAF.",
+            evidence: stateSummaryEvidence(
+              "edge_security_controls",
+              hasWaf ? "waf-present" : "waf-missing",
+              serviceCodes.filter((serviceCode) => EDGE_SERVICE_CODES.has(serviceCode)),
+            ),
           })
         : makeRuleResult({
             pack: "platform-governance",
@@ -615,6 +754,7 @@ function buildSavedEstimateChecks({
             reason: "No edge-facing services were detected.",
             remediation: "None.",
             details: "The saved estimate is not edge-exposed.",
+            evidence: stateSummaryEvidence("edge_security_controls", "not-edge-exposed"),
           }),
       makeRuleResult({
         pack: "platform-governance",
@@ -629,6 +769,11 @@ function buildSavedEstimateChecks({
           !edgeExposed || hasCloudWatch
             ? "Operational visibility controls are present or not required by the saved service mix."
             : "Edge-facing services are present without CloudWatch.",
+        evidence: stateSummaryEvidence(
+          "operational_visibility",
+          !edgeExposed || hasCloudWatch ? "present-or-not-required" : "missing-cloudwatch",
+          hasCloudWatch ? ["amazonCloudWatch"] : [],
+        ),
       }),
       usesPremiumService
         ? makeRuleResult({
@@ -643,6 +788,13 @@ function buildSavedEstimateChecks({
             details: hasJustification(textCorpus)
               ? "A justification marker was found for premium managed services."
               : "Premium managed services are present without a clear justification marker.",
+            evidence: stateSummaryEvidence(
+              "premium_managed_service_justification",
+              hasJustification(textCorpus) ? "justified" : "missing-justification",
+              serviceDefinitionsForSavedEstimate(services)
+                .filter((service) => PREMIUM_SERVICE_IDS.has(service.id))
+                .map((service) => service.id),
+            ),
           })
         : makeRuleResult({
             pack: "platform-governance",
@@ -654,6 +806,10 @@ function buildSavedEstimateChecks({
             reason: "No premium managed services were detected.",
             remediation: "None.",
             details: "The saved estimate does not include premium managed services.",
+            evidence: stateSummaryEvidence(
+              "premium_managed_service_justification",
+              "not-applicable",
+            ),
           }),
     ],
     parityDetails: modeled.parityDetails,
@@ -713,6 +869,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "A priced scenario requires a positive target budget.",
       remediation: "Provide a positive targetMonthlyUsd or adjust the scenario policy.",
       details: `Scenario target monthly budget is ${scenario.targetMonthlyUsd.toFixed(2)} USD.`,
+      evidence: numericComparisonEvidence("scenario_target_monthly_usd", scenario.targetMonthlyUsd, 0, {
+        comparator: "gte",
+        unit: "usd",
+      }),
     }),
     makeRuleResult({
       pack: "pricing-integrity",
@@ -723,6 +883,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "A scenario needs at least one priced service row.",
       remediation: "Ensure the architecture selects at least one supported service.",
       details: `Scenario contains ${scenario.serviceBreakdown.length} priced service rows.`,
+      evidence: numericComparisonEvidence("scenario_service_rows", scenario.serviceBreakdown.length, 1, {
+        comparator: "gte",
+        unit: "count",
+      }),
     }),
     scenario.coverage.unavailable.length === 0
       ? makeRuleResult({
@@ -735,6 +899,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "All selected services are at least modeled in the target region.",
           remediation: "None.",
           details: "All selected services are priced or modeled in the selected region.",
+          evidence: stringSetEvidence("exact_or_modeled_services", [
+            ...scenario.coverage.exact,
+            ...scenario.coverage.modeled,
+          ]),
         })
       : makeRuleResult({
           pack: "pricing-integrity",
@@ -745,6 +913,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "Unavailable services block scenario execution in the selected region.",
           remediation: "Remove the unavailable services or change region.",
           details: `Unavailable services in the selected region: ${scenario.coverage.unavailable.join(", ")}.`,
+          evidence: stringSetEvidence("unavailable_services", scenario.coverage.unavailable),
         }),
     makeRuleResult({
       pack: "architecture-completeness",
@@ -757,6 +926,11 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "Each blueprint requires a minimum service set.",
       remediation: "Add the missing required services or select a different blueprint.",
       details: `Required services: ${requiredServiceIds.join(", ")}.`,
+      evidence: requiredPresentMissingEvidence(
+        "required_blueprint_services",
+        requiredServiceIds,
+        selectedServiceIds,
+      ),
     }),
     makeRuleResult({
       pack: "architecture-completeness",
@@ -769,6 +943,11 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "Each blueprint requires a minimum service-family mix.",
       remediation: "Add the missing service family or choose a blueprint that matches the workload.",
       details: `Required families: ${architecture.requiredServiceFamilies.join(", ")}. Present families: ${serviceFamilies.join(", ") || "none"}.`,
+      evidence: requiredPresentMissingEvidence(
+        "required_service_families",
+        architecture.requiredServiceFamilies,
+        serviceFamilies,
+      ),
     }),
     makeRuleResult({
       pack: "architecture-completeness",
@@ -783,6 +962,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
         (architecture.requiredCapabilities ?? []).length > 0
           ? `Required capabilities: ${architecture.requiredCapabilities.join(", ")}.`
           : "This architecture profile does not declare required capabilities.",
+      evidence: stringSetEvidence(
+        "required_capabilities",
+        architecture.requiredCapabilities ?? [],
+      ),
     }),
     dominantForbiddenServices.length === 0 && forbiddenServiceIds.length === 0
       ? makeRuleResult({
@@ -795,6 +978,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "The selected service mix is coherent with the architecture profile.",
           remediation: "None.",
           details: "No forbidden service families were selected for this architecture.",
+          evidence: stringSetEvidence("forbidden_service_conflicts", []),
         })
       : makeRuleResult({
           pack: "architecture-completeness",
@@ -808,6 +992,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
             ...forbiddenServiceIds,
             ...dominantForbiddenServices.map((service) => service.serviceId),
           ].join(", ")}.`,
+          evidence: stringSetEvidence("forbidden_service_conflicts", [
+            ...forbiddenServiceIds,
+            ...dominantForbiddenServices.map((service) => service.serviceId),
+          ]),
         }),
     architecture.fitGaps?.length > 0
       ? makeRuleResult({
@@ -820,6 +1008,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "The selected pattern is the nearest supported fit, but it still misses an explicit architectural requirement from the prompt.",
           remediation: "Resolve the fit gap or document why the nearest-fit pattern is acceptable.",
           details: architecture.fitGaps.join(" "),
+          evidence: stringSetEvidence("pattern_fit_gaps", architecture.fitGaps),
         })
       : makeRuleResult({
           pack: "architecture-completeness",
@@ -831,6 +1020,9 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "No architecture fit gaps were recorded for the selected pattern.",
           remediation: "None.",
           details: `Pattern '${architecture.patternId ?? architecture.blueprintId}' cleanly matches the extracted architecture intent.`,
+          evidence: stateSummaryEvidence("pattern_fit", "clean", [
+            architecture.patternId ?? architecture.blueprintId,
+          ]),
         }),
     architecture.requiredUnpricedCapabilities?.length > 0
       ? makeRuleResult({
@@ -845,6 +1037,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           details: architecture.requiredUnpricedCapabilities
             .map((capability) => capability.id)
             .join(", "),
+          evidence: stringSetEvidence(
+            "required_unpriced_capabilities",
+            architecture.requiredUnpricedCapabilities.map((capability) => capability.id),
+          ),
         })
       : makeRuleResult({
           pack: "architecture-completeness",
@@ -856,6 +1052,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "All required capabilities are represented in the priced architecture.",
           remediation: "None.",
           details: "No required-but-unpriced architecture capabilities were recorded.",
+          evidence: stringSetEvidence("required_unpriced_capabilities", []),
         }),
     makeRuleResult({
       pack: "architecture-completeness",
@@ -870,6 +1067,11 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "The architecture engine expects a three-environment model unless explicitly changed.",
       remediation: "Provide dev, staging, and prod environment weights.",
       details: "Architecture includes the expected three-environment split.",
+      evidence: requiredPresentMissingEvidence(
+        "environment_model",
+        ["dev", "staging", "prod"],
+        Object.keys(architecture.environmentSplit),
+      ),
     }),
     (scenario.coverage.exact?.length ?? 0) > 0
       ? makeRuleResult({
@@ -882,6 +1084,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "At least one calculator-backed service is present in the scenario.",
           remediation: "None.",
           details: `Calculator-backed services: ${scenario.coverage.exact.join(", ")}.`,
+          evidence: stringSetEvidence("calculator_backed_services", scenario.coverage.exact),
         })
       : makeRuleResult({
           pack: "architecture-completeness",
@@ -892,6 +1095,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "An exact calculator flow requires calculator-backed services.",
           remediation: "Scope the scenario to exact-capable services or add serializer coverage.",
           details: "No calculator-backed services were selected.",
+          evidence: stringSetEvidence("calculator_backed_services", []),
         }),
     makeRuleResult({
       pack: "funding-readiness",
@@ -903,6 +1107,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "Supportive services should remain proportionate to the primary workload.",
       remediation: "Trim shared-service overhead or expand the primary workload.",
       details: `Supportive spend ${percent(supportiveRatio)} of modeled total.`,
+      evidence: numericComparisonEvidence("supportive_spend_ratio", supportiveRatio, 0.25, {
+        comparator: "lte",
+        unit: "ratio",
+      }),
     }),
     makeRuleResult({
       pack: "funding-readiness",
@@ -916,6 +1124,15 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "Core architecture services should dominate the spend mix for the chosen topology.",
       remediation: "Increase the core workload scope or remove unrelated add-ons that are dominating the estimate.",
       details: `Primary architecture services account for ${percent(primaryRatio)} of modeled spend vs expected minimum ${percent(architecture.minimumPrimaryDominanceRatio ?? 0.55)}.`,
+      evidence: numericComparisonEvidence(
+        "primary_architecture_spend_ratio",
+        primaryRatio,
+        architecture.minimumPrimaryDominanceRatio ?? 0.55,
+        {
+          comparator: "gte",
+          unit: "ratio",
+        },
+      ),
     }),
     makeRuleResult({
       pack: "funding-readiness",
@@ -937,6 +1154,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "Budgets should size the architecture, not force a different topology.",
       remediation: "Adjust the target budget or select a different architecture family if the nearest valid fit is too far away.",
       details: scenario.budgetFit?.details ?? "No scenario budget-fit details were recorded.",
+      evidence: stateSummaryEvidence(
+        "architecture_budget_fit",
+        scenario.budgetFit?.status ?? "unknown",
+      ),
     }),
     scenario.coverage.modeled.length === 0
       ? makeRuleResult({
@@ -949,6 +1170,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "No modeled-only services block exact calculator generation.",
           remediation: "None.",
           details: "No modeled-only services block exact calculator generation.",
+          evidence: stringSetEvidence("modeled_service_gaps", []),
         })
       : makeRuleResult({
           pack: "funding-readiness",
@@ -960,6 +1182,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "Modeled-only services prevent a fully exact calculator link.",
           remediation: "Scope the scenario to exact services or complete serializer coverage for the modeled services.",
           details: `Modeled-only services present: ${scenario.coverage.modeled.join(", ")}.`,
+          evidence: stringSetEvidence("modeled_service_gaps", scenario.coverage.modeled),
         }),
     scenario.calculatorEligible
       ? makeRuleResult({
@@ -972,6 +1195,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "The scenario can be turned into an official calculator link.",
           remediation: "None.",
           details: "Scenario can be turned into an official calculator link.",
+          evidence: stateSummaryEvidence("calculator_link_ready", "ready"),
         })
       : makeRuleResult({
           pack: "funding-readiness",
@@ -983,6 +1207,11 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "The scenario is not yet calculator-link ready.",
           remediation: "Resolve the calculator blockers or scope the scenario down to an exact-capable subset.",
           details: scenario.calculatorBlockers.join(" "),
+          evidence: stateSummaryEvidence(
+            "calculator_link_ready",
+            "blocked",
+            scenario.calculatorBlockers,
+          ),
         }),
     architecture.region !== DEFAULT_REGION
       ? makeRuleResult({
@@ -997,6 +1226,11 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           details: hasJustificationNotes
             ? "Architecture notes include a region justification marker."
             : `Architecture targets ${architecture.region} without an explicit justification marker in notes.`,
+          evidence: stateSummaryEvidence(
+            "non_default_region_justification",
+            hasJustificationNotes ? "justified" : "missing-justification",
+            [architecture.region],
+          ),
         })
       : makeRuleResult({
           pack: "platform-governance",
@@ -1008,6 +1242,11 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "The default region path does not require extra regional justification.",
           remediation: "None.",
           details: `Architecture stays on the default region path (${DEFAULT_REGION}).`,
+          evidence: stateSummaryEvidence(
+            "non_default_region_justification",
+            "default-region",
+            [DEFAULT_REGION],
+          ),
         }),
     edgeExposed
       ? makeRuleResult({
@@ -1022,6 +1261,13 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           details: hasWaf
             ? "Edge-facing services include aws-waf-v2."
             : "Edge-facing services are present without aws-waf-v2.",
+          evidence: stateSummaryEvidence(
+            "edge_security_controls",
+            hasWaf ? "waf-present" : "waf-missing",
+            selectedServiceIds.filter((serviceId) =>
+              ["application-load-balancer", "amazon-cloudfront", "amazon-api-gateway-http", "amazon-route53"].includes(serviceId),
+            ),
+          ),
         })
       : makeRuleResult({
           pack: "platform-governance",
@@ -1033,6 +1279,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "No edge-facing services were selected.",
           remediation: "None.",
           details: "The architecture is not edge-exposed.",
+          evidence: stateSummaryEvidence("edge_security_controls", "not-edge-exposed"),
         }),
     makeRuleResult({
       pack: "platform-governance",
@@ -1047,6 +1294,11 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
         !edgeExposed || hasCloudWatch
           ? "Operational visibility controls are present or not required by the design."
           : "Edge-facing services are present without amazon-cloudwatch.",
+      evidence: stateSummaryEvidence(
+        "operational_visibility",
+        !edgeExposed || hasCloudWatch ? "present-or-not-required" : "missing-cloudwatch",
+        hasCloudWatch ? ["amazon-cloudwatch"] : [],
+      ),
     }),
     usesPremiumService
       ? makeRuleResult({
@@ -1061,6 +1313,13 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           details: hasJustificationNotes
             ? "Architecture notes include a premium service justification marker."
             : "Premium managed services are selected without an explicit justification marker in notes.",
+          evidence: stateSummaryEvidence(
+            "premium_managed_service_justification",
+            hasJustificationNotes ? "justified" : "missing-justification",
+            architecture.selectedServices
+              .filter((service) => PREMIUM_SERVICE_IDS.has(service.serviceId))
+              .map((service) => service.serviceId),
+          ),
         })
       : makeRuleResult({
           pack: "platform-governance",
@@ -1072,6 +1331,10 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           reason: "No premium managed services were selected.",
           remediation: "None.",
           details: "The architecture does not include premium managed services.",
+          evidence: stateSummaryEvidence(
+            "premium_managed_service_justification",
+            "not-applicable",
+          ),
         }),
   ];
 
@@ -1088,6 +1351,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
             reason: "The core exact estimate preview validated before save.",
             remediation: "None.",
             details: "Core template preview validates successfully before save.",
+            evidence: stateSummaryEvidence("core_preview_valid", "pass"),
           })
         : makeRuleResult({
             pack: "pricing-integrity",
@@ -1098,6 +1362,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
             reason: "The core exact estimate preview failed validation before save.",
             remediation: "Inspect the core estimate payload and fix the failing preview rules.",
             details: draftValidation.hardFailures.join(" "),
+            evidence: stringSetEvidence("core_preview_failures", draftValidation.hardFailures),
           }),
     );
   }

@@ -379,10 +379,49 @@ const serviceCoverageSchema = z.object({
   unavailable: z.array(serviceIdEnum),
 });
 const validationEvidenceSchema = z
-  .object({
-    kind: z.string(),
-  })
-  .catchall(z.unknown())
+  .union([
+    z.object({
+      kind: z.literal("string_set"),
+      label: z.string(),
+      values: z.array(z.string()),
+    }),
+    z.object({
+      kind: z.literal("required_present_missing"),
+      label: z.string(),
+      required: z.array(z.string()),
+      present: z.array(z.string()),
+      missing: z.array(z.string()),
+    }),
+    z.object({
+      kind: z.literal("numeric_comparison"),
+      metric: z.string(),
+      actual: z.number(),
+      expected: z.number().nullable(),
+      comparator: z.enum(["eq", "lte", "gte", "band"]),
+      tolerance: z.number().nullable(),
+      unit: z.enum(["usd", "ratio", "count"]),
+    }),
+    z.object({
+      kind: z.literal("expected_found"),
+      label: z.string(),
+      expected: z.string(),
+      found: z.array(z.string()),
+    }),
+    z.object({
+      kind: z.literal("parity_summary"),
+      storedMonthlyUsd: z.number(),
+      modeledMonthlyUsd: z.number(),
+      groupMonthlyUsd: z.number().nullable(),
+      mismatchedServiceCodes: z.array(z.string()),
+      unsupportedServiceCodes: z.array(z.string()),
+    }),
+    z.object({
+      kind: z.literal("state_summary"),
+      label: z.string(),
+      state: z.string(),
+      values: z.array(z.string()),
+    }),
+  ])
   .nullable()
   .optional();
 const validationCheckSchema = z.object({

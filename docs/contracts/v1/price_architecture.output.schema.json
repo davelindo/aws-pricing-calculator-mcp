@@ -2949,16 +2949,234 @@
                     "evidence": {
                       "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string"
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "string_set"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "label",
+                                "values"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "required_present_missing"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "required": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "present": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "missing": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "label",
+                                "required",
+                                "present",
+                                "missing"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "numeric_comparison"
+                                },
+                                "metric": {
+                                  "type": "string"
+                                },
+                                "actual": {
+                                  "type": "number"
+                                },
+                                "expected": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "comparator": {
+                                  "type": "string",
+                                  "enum": [
+                                    "eq",
+                                    "lte",
+                                    "gte",
+                                    "band"
+                                  ]
+                                },
+                                "tolerance": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "unit": {
+                                  "type": "string",
+                                  "enum": [
+                                    "usd",
+                                    "ratio",
+                                    "count"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "metric",
+                                "actual",
+                                "expected",
+                                "comparator",
+                                "tolerance",
+                                "unit"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "expected_found"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "expected": {
+                                  "type": "string"
+                                },
+                                "found": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "label",
+                                "expected",
+                                "found"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "parity_summary"
+                                },
+                                "storedMonthlyUsd": {
+                                  "type": "number"
+                                },
+                                "modeledMonthlyUsd": {
+                                  "type": "number"
+                                },
+                                "groupMonthlyUsd": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "mismatchedServiceCodes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "unsupportedServiceCodes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "storedMonthlyUsd",
+                                "modeledMonthlyUsd",
+                                "groupMonthlyUsd",
+                                "mismatchedServiceCodes",
+                                "unsupportedServiceCodes"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "state_summary"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "label",
+                                "state",
+                                "values"
+                              ],
+                              "additionalProperties": false
                             }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": {}
+                          ]
                         },
                         {
                           "type": "null"
@@ -3095,16 +3313,234 @@
                           "evidence": {
                             "anyOf": [
                               {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string"
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "string_set"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "values": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "label",
+                                      "values"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "required_present_missing"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "required": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "present": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "missing": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "label",
+                                      "required",
+                                      "present",
+                                      "missing"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "numeric_comparison"
+                                      },
+                                      "metric": {
+                                        "type": "string"
+                                      },
+                                      "actual": {
+                                        "type": "number"
+                                      },
+                                      "expected": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "comparator": {
+                                        "type": "string",
+                                        "enum": [
+                                          "eq",
+                                          "lte",
+                                          "gte",
+                                          "band"
+                                        ]
+                                      },
+                                      "tolerance": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "unit": {
+                                        "type": "string",
+                                        "enum": [
+                                          "usd",
+                                          "ratio",
+                                          "count"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "metric",
+                                      "actual",
+                                      "expected",
+                                      "comparator",
+                                      "tolerance",
+                                      "unit"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "expected_found"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "expected": {
+                                        "type": "string"
+                                      },
+                                      "found": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "label",
+                                      "expected",
+                                      "found"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "parity_summary"
+                                      },
+                                      "storedMonthlyUsd": {
+                                        "type": "number"
+                                      },
+                                      "modeledMonthlyUsd": {
+                                        "type": "number"
+                                      },
+                                      "groupMonthlyUsd": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "mismatchedServiceCodes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "unsupportedServiceCodes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "storedMonthlyUsd",
+                                      "modeledMonthlyUsd",
+                                      "groupMonthlyUsd",
+                                      "mismatchedServiceCodes",
+                                      "unsupportedServiceCodes"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "state_summary"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "type": "string"
+                                      },
+                                      "values": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "label",
+                                      "state",
+                                      "values"
+                                    ],
+                                    "additionalProperties": false
                                   }
-                                },
-                                "required": [
-                                  "kind"
-                                ],
-                                "additionalProperties": {}
+                                ]
                               },
                               {
                                 "type": "null"
