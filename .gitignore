@@ -4,3 +4,6 @@ coverage/
 npm-debug.log*
 ROADMAP.md
 ROADMAP.local.md
+.env
+.dev.vars
+.wrangler/

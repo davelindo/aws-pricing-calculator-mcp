@@ -123,10 +123,48 @@ const architectureCandidateSchema = z.object({
   rationale: z.array(z.string()),
   explicit: z.boolean().optional(),
 });
+const patternCandidateSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  fitScore: z.number(),
+  budgetFit: budgetFitSchema,
+  requiredServiceIds: z.array(z.string()),
+  primaryServiceIds: z.array(z.string()),
+  forbiddenServiceIds: z.array(z.string()),
+  requiredUnpricedCapabilities: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      details: z.string(),
+    }),
+  ),
+  traits: z.array(z.string()),
+  rationale: z.array(z.string()),
+});
 const inferenceFieldSchema = z.object({
   value: z.any(),
   source: z.string(),
   confidence: z.number(),
+});
+const hardConstraintSchema = z.object({
+  requestedDatabase: z.string().nullable(),
+  requiresServerless: z.boolean(),
+  requiresPrivateConnectivity: z.boolean(),
+  requiresFargatePrimary: z.boolean(),
+  requiresGovernance: z.boolean(),
+  requiresStreamProcessing: z.boolean(),
+  requestedAlbOrigins: z.boolean(),
+  requestedEventBridge: z.boolean(),
+  requestedQueueing: z.boolean(),
+  requestedFiles: z.boolean(),
+  requestedSearch: z.boolean(),
+  requestedCdn: z.boolean(),
+});
+const unpricedCapabilitySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  details: z.string(),
 });
 const scenarioPolicySchema = z.object({
   id: z.string(),
@@ -236,11 +274,18 @@ const architectureSchema = z.object({
   blueprintId: z.string(),
   blueprintTitle: z.string(),
   templateId: z.string(),
+  environmentModel: z.string(),
   architectureFamily: z.string(),
   architectureSubtype: z.string(),
+  patternId: z.string(),
+  patternTitle: z.string(),
+  patternDescription: z.string(),
+  recommendedPatternId: z.string(),
   recommendedArchitectureId: z.string(),
   alternativeArchitectureIds: z.array(z.string()),
   candidateArchitectures: z.array(architectureCandidateSchema),
+  patternCandidates: z.array(patternCandidateSchema),
+  alternativePatternIds: z.array(z.string()),
   requiredCapabilities: z.array(z.string()),
   budgetFit: budgetFitSchema,
   packIds: z.array(z.string()),
@@ -262,6 +307,11 @@ const architectureSchema = z.object({
   includeDefaultAddOns: z.boolean(),
   selectedServices: z.array(selectedServiceSchema),
   serviceCoverage: serviceCoverageSchema,
+  hardConstraints: hardConstraintSchema,
+  fitGaps: z.array(z.string()),
+  excludedDefaults: z.array(z.string()),
+  requiredUnpricedCapabilities: z.array(unpricedCapabilitySchema),
+  minimumPrimaryDominanceRatio: z.number(),
   defaultScenarioPolicies: z.array(scenarioPolicySchema),
   blockers: z.array(z.string()),
   blockerDetails: z.array(structuredItemSchema),
@@ -300,6 +350,7 @@ const serviceBreakdownSchema = z.object({
 });
 const linkPlanSchema = z.object({
   blueprintId: z.string(),
+  patternId: z.string(),
   scenarioId: z.string(),
   templateId: z.string(),
   targetMonthlyUsd: z.number(),
@@ -444,9 +495,9 @@ function renderPricedArchitecture(result) {
         `${scenario.title}: ${scenario.modeledMonthlyUsd.toFixed(2)} USD/month`,
         `Budget fit: ${scenario.budgetFit.status}`,
         `Policy: ${scenario.scenarioPolicy.computeCommitment}, ${scenario.scenarioPolicy.haPosture}, ${scenario.scenarioPolicy.environmentSizing}`,
-        `Drivers: ${scenario.deltaDrivers.join("; ")}`,
+        `Drivers: ${(scenario.deltaDrivers ?? []).join("; ")}`,
         `Calculator eligible: ${scenario.calculatorEligible ? "yes" : "no"}`,
-        scenario.calculatorBlockers.length > 0
+        (scenario.calculatorBlockers?.length ?? 0) > 0
           ? scenario.calculatorBlockers.map((value) => `- ${value}`).join("\n")
           : "- no calculator blockers",
       ].join("\n"),

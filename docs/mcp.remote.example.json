@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "awsPricingCalculator": {
+      "type": "streamable-http",
+      "url": "https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp"
+    }
+  }
+}

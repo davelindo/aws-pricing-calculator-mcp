@@ -282,6 +282,66 @@ test("priceArchitecture keeps the modernization blueprint calculator-link eligib
   }
 });
 
+test("priceArchitecture tolerates schema-round-tripped architecture inputs with omitted optional fields", () => {
+  const architecture = designArchitecture({
+    blueprintId: "container-platform",
+    targetMonthlyUsd: 7000,
+    region: "us-east-1",
+    operatingSystem: "linux",
+    notes: "Regression test for schema round-trip.",
+    includeDefaultAddOns: true,
+  });
+  const roundTrippedArchitecture = {
+    version: architecture.version,
+    architectureId: architecture.architectureId,
+    readyToPrice: architecture.readyToPrice,
+    sourceType: architecture.sourceType,
+    briefSummary: architecture.briefSummary,
+    blueprintId: architecture.blueprintId,
+    blueprintTitle: architecture.blueprintTitle,
+    templateId: architecture.templateId,
+    environmentModel: architecture.environmentModel,
+    architectureFamily: architecture.architectureFamily,
+    architectureSubtype: architecture.architectureSubtype,
+    recommendedArchitectureId: architecture.recommendedArchitectureId,
+    alternativeArchitectureIds: architecture.alternativeArchitectureIds,
+    candidateArchitectures: architecture.candidateArchitectures,
+    requiredCapabilities: architecture.requiredCapabilities,
+    budgetFit: architecture.budgetFit,
+    packIds: architecture.packIds,
+    packs: architecture.packs,
+    requiredServiceFamilies: architecture.requiredServiceFamilies,
+    clientName: architecture.clientName,
+    estimateName: architecture.estimateName,
+    notes: architecture.notes,
+    region: architecture.region,
+    operatingSystem: architecture.operatingSystem,
+    targetMonthlyUsd: architecture.targetMonthlyUsd,
+    environmentSplit: architecture.environmentSplit,
+    includeDefaultAddOns: architecture.includeDefaultAddOns,
+    selectedServices: architecture.selectedServices,
+    serviceCoverage: {
+      exact: architecture.serviceCoverage.exact,
+    },
+    defaultScenarioPolicies: architecture.defaultScenarioPolicies,
+    blockers: architecture.blockers,
+    blockerDetails: architecture.blockerDetails,
+    assumptions: architecture.assumptions,
+    warnings: architecture.warnings,
+    unresolvedQuestions: architecture.unresolvedQuestions,
+    suggestedNextActions: architecture.suggestedNextActions,
+    inference: architecture.inference,
+    confidence: architecture.confidence,
+  };
+
+  const priced = priceArchitecture({
+    architecture: roundTrippedArchitecture,
+  });
+
+  assert.equal(priced.scenarios.length > 0, true);
+  assert.equal(priced.scenarios[0].calculatorBlockers.length >= 0, true);
+});
+
 test("priceArchitecture keeps the warehouse-centric analytics blueprint calculator-link eligible across roadmap regions", () => {
   for (const region of ROADMAP_REGIONS) {
     const priced = priceArchitecture({

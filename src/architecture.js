@@ -1423,6 +1423,14 @@ function annotateBreakdown(blueprint, breakdown) {
 
   return {
     ...breakdown,
+    implementationStatus:
+      breakdown.implementationStatus ??
+      (breakdown.serviceId ? getServiceDefinition(breakdown.serviceId).implementationStatus : null),
+    capability:
+      breakdown.capability ??
+      (breakdown.serviceId && breakdown.region
+        ? getServiceRegionCapability(breakdown.serviceId, breakdown.region)
+        : null),
     supportive: blueprint.requiredServiceIds.includes(breakdown.serviceId) ? false : breakdown.supportive,
     role: metadata.role,
     required: metadata.required,
@@ -2162,6 +2170,27 @@ function recommendedScenarioIdFor(scenarios) {
   return ranked[0]?.scenarioId ?? null;
 }
 
+function normalizeArchitectureForPricing(architecture) {
+  const coverage = architecture?.serviceCoverage ?? {};
+
+  return {
+    ...architecture,
+    patternId: architecture?.patternId ?? `${architecture?.blueprintId ?? "linux-web-stack"}.default`,
+    fitGaps: architecture?.fitGaps ?? [],
+    requiredUnpricedCapabilities: architecture?.requiredUnpricedCapabilities ?? [],
+    blockers: architecture?.blockers ?? [],
+    warnings: architecture?.warnings ?? [],
+    assumptions: architecture?.assumptions ?? [],
+    defaultScenarioPolicies: architecture?.defaultScenarioPolicies ?? [],
+    selectedServices: architecture?.selectedServices ?? [],
+    serviceCoverage: {
+      exact: coverage.exact ?? [],
+      modeled: coverage.modeled ?? [],
+      unavailable: coverage.unavailable ?? [],
+    },
+  };
+}
+
 export function designArchitecture({
   blueprintId,
   templateId,
@@ -2585,7 +2614,9 @@ export function designArchitecture({
 }
 
 export function priceArchitecture(input = {}) {
-  const architecture = input?.architecture?.architectureId ? input.architecture : designArchitecture(input);
+  const architecture = input?.architecture?.architectureId
+    ? normalizeArchitectureForPricing(input.architecture)
+    : designArchitecture(input);
 
   if (!architecture.readyToPrice || architecture.targetMonthlyUsd == null) {
     return {

@@ -1,0 +1,11 @@
+name = "aws-pricing-calculator-mcp"
+main = "src/worker.js"
+compatibility_date = "2026-03-11"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+MCP_ALLOWED_ORIGINS = ""
