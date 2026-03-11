@@ -9,7 +9,7 @@ import { amazonCloudfrontService } from "./amazon-cloudfront.js";
 import { amazonCloudwatchService } from "./amazon-cloudwatch.js";
 import { amazonDynamodbService } from "./amazon-dynamodb.js";
 import { amazonEbsService } from "./amazon-ebs.js";
-import { amazonEcsEc2Service } from "./amazon-ecs-ec2.js";
+import { amazonEcsEc2Service, isEcsEc2SavedService } from "./amazon-ecs-ec2.js";
 import { amazonEcsFargateService } from "./amazon-ecs-fargate.js";
 import { amazonEfsService } from "./amazon-efs.js";
 import { amazonElasticacheRedisService } from "./amazon-elasticache-redis.js";
@@ -82,11 +82,15 @@ const SERVICE_DEFINITION_MAP = new Map(
 
 export { TARGET_REGIONS, SUPPORT_STATES, capabilityForRegion };
 
-const SERVICE_CODE_MAP = new Map(
-  SERVICE_DEFINITIONS.flatMap((service) =>
-    service.calculatorServiceCodes.map((serviceCode) => [serviceCode, service]),
-  ),
-);
+const SERVICE_CODE_MAP = new Map();
+
+for (const service of SERVICE_DEFINITIONS) {
+  for (const serviceCode of service.calculatorServiceCodes) {
+    if (!SERVICE_CODE_MAP.has(serviceCode)) {
+      SERVICE_CODE_MAP.set(serviceCode, service);
+    }
+  }
+}
 
 export function getServiceDefinition(serviceId) {
   const definition = SERVICE_DEFINITION_MAP.get(serviceId);
@@ -100,6 +104,20 @@ export function getServiceDefinition(serviceId) {
 
 export function findServiceDefinitionByCalculatorServiceCode(serviceCode) {
   return SERVICE_CODE_MAP.get(serviceCode) ?? null;
+}
+
+export function resolveServiceDefinitionForSavedService(service) {
+  if (!service?.serviceCode) {
+    return null;
+  }
+
+  if (service.serviceCode === "ec2Enhancement") {
+    return isEcsEc2SavedService(service)
+      ? getServiceDefinition("amazon-ecs-ec2")
+      : getServiceDefinition("amazon-ec2");
+  }
+
+  return findServiceDefinitionByCalculatorServiceCode(service.serviceCode);
 }
 
 export function listServiceDefinitions() {

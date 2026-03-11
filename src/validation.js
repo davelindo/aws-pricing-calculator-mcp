@@ -5,7 +5,7 @@ import {
   getTemplate,
   resolveBlueprintIdForTemplate,
 } from "./catalog.js";
-import { findServiceDefinitionByCalculatorServiceCode } from "./services/index.js";
+import { resolveServiceDefinitionForSavedService } from "./services/index.js";
 import {
   ENVIRONMENTS,
   parseEnvironmentTag,
@@ -120,7 +120,7 @@ function inferTemplateIdFromServices(services) {
 }
 
 function modeledServiceMonthlyUsd(service) {
-  const definition = findServiceDefinitionByCalculatorServiceCode(service?.serviceCode);
+  const definition = resolveServiceDefinitionForSavedService(service);
 
   try {
     if (!definition?.modelSavedMonthlyUsd) {
@@ -276,7 +276,7 @@ function presentEnvironments(services) {
 
 function serviceDefinitionsForSavedEstimate(services) {
   return serviceEntries(services)
-    .map((service) => findServiceDefinitionByCalculatorServiceCode(service.serviceCode))
+    .map((service) => resolveServiceDefinitionForSavedService(service))
     .filter(Boolean);
 }
 

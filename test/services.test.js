@@ -7,6 +7,7 @@ import {
   TARGET_REGIONS,
   findServiceDefinitionByCalculatorServiceCode,
   getServiceDefinition,
+  resolveServiceDefinitionForSavedService,
 } from "../src/services/index.js";
 
 const SERVICE_BUDGETS = {
@@ -30,6 +31,7 @@ const SERVICE_BUDGETS = {
   "amazon-s3": 90,
   "amazon-efs": 240,
   "amazon-ebs": 260,
+  "amazon-ecs-ec2": 780,
   "amazon-cloudfront": 210,
   "amazon-lambda": 75,
   "amazon-dynamodb": 95,
@@ -51,25 +53,8 @@ const DEFAULT_ENVIRONMENT_SPLIT = {
   staging: 0.3,
   prod: 0.5,
 };
-const MODELED_ONLY_SERVICE_ID = "amazon-ecs-ec2";
-const ACTIVE_IMPLEMENTATION_STATUSES = new Set(["implemented", "modeled"]);
-
-function assertModeledCatalogEntry(service) {
-  assert.equal(service.implementationStatus, "modeled");
-  assert.deepEqual(service.calculatorServiceCodes, []);
-  assert.ok(
-    service.capabilityMatrix.every((entry) => entry.support === "modeled"),
-    `${MODELED_ONLY_SERVICE_ID} should stay modeled in every roadmap region`,
-  );
-  assert.ok(
-    service.capabilityMatrix.every((entry) => entry.calculatorSaveSupported === false),
-    `${MODELED_ONLY_SERVICE_ID} should not advertise calculator save support`,
-  );
-  assert.ok(
-    service.capabilityMatrix.every((entry) => entry.validationSupported === true),
-    `${MODELED_ONLY_SERVICE_ID} should remain validation-capable as a modeled planning service`,
-  );
-}
+const ECS_EC2_SERVICE_ID = "amazon-ecs-ec2";
+const ACTIVE_IMPLEMENTATION_STATUSES = new Set(["implemented"]);
 
 function assertExactCatalogEntry(service) {
   assert.ok(service.calculatorServiceCodes.length > 0, `${service.id} should expose service codes`);
@@ -142,7 +127,7 @@ function buildServiceEntry(definition, region, monthlyBudgetUsd) {
   }
 }
 
-test("service registry exposes exact services plus the modeled ECS on EC2 planning entry", () => {
+test("service registry exposes an all-exact shipped service surface", () => {
   const catalog = listServiceCatalog();
 
   assert.ok(catalog.length > 0);
@@ -158,21 +143,15 @@ test("service registry exposes exact services plus the modeled ECS on EC2 planni
       `${service.id} region count`,
     );
     assert.deepEqual(service.supportedRegions, TARGET_REGIONS, `${service.id} supported regions`);
-
-    if (service.id === MODELED_ONLY_SERVICE_ID) {
-      assertModeledCatalogEntry(service);
-      continue;
-    }
-
     assertExactCatalogEntry(service);
   }
 });
 
-test("service registry maps every calculator service code back to its definition", () => {
+test("service registry maps unique calculator service codes back to their canonical definitions", () => {
   const catalog = listServiceCatalog();
 
   for (const service of catalog) {
-    if (service.calculatorServiceCodes.length === 0) {
+    if (service.id === ECS_EC2_SERVICE_ID) {
       continue;
     }
 
@@ -183,6 +162,28 @@ test("service registry maps every calculator service code back to its definition
       assert.equal(mapped.id, service.id);
     }
   }
+});
+
+test("saved ec2Enhancement entries resolve to either EC2 or ECS on EC2 based on their description", () => {
+  const ec2 = getServiceDefinition("amazon-ec2");
+  const ecsEc2 = getServiceDefinition(ECS_EC2_SERVICE_ID);
+  const ec2Entry = ec2.buildEntry({
+    environment: "shared",
+    region: "us-east-1",
+    operatingSystem: "linux",
+    instanceType: "m6i.large",
+    instanceCount: 2,
+    notes: "Unit test baseline.",
+  });
+  const ecsEntry = ecsEc2.buildEntry({
+    region: "us-east-1",
+    monthlyBudgetUsd: 780,
+    notes: "Unit test baseline.",
+  });
+
+  assert.equal(resolveServiceDefinitionForSavedService(ec2Entry.service)?.id, "amazon-ec2");
+  assert.equal(resolveServiceDefinitionForSavedService(ecsEntry.service)?.id, ECS_EC2_SERVICE_ID);
+  assert.equal(findServiceDefinitionByCalculatorServiceCode("ec2Enhancement")?.id, "amazon-ec2");
 });
 
 test("public service catalog omits implementation functions and keeps the exact surface", () => {
@@ -235,8 +236,8 @@ test("exact shipped service modules price budgets and round-trip through their s
   }
 });
 
-test("modeled planning services still expose a budget pricer", () => {
-  const ecsEc2 = getServiceDefinition(MODELED_ONLY_SERVICE_ID);
+test("ecs on ec2 exact service still exposes a budget pricer and exact serializer", () => {
+  const ecsEc2 = getServiceDefinition(ECS_EC2_SERVICE_ID);
   const capability = ecsEc2.capabilityMatrix.find((entry) => entry.region === "ca-central-1");
   const priced = ecsEc2.priceBudget({
     definition: ecsEc2,
@@ -244,10 +245,23 @@ test("modeled planning services still expose a budget pricer", () => {
     monthlyBudgetUsd: 780,
     capability,
   });
+  const built = ecsEc2.buildEntry({
+    region: "ca-central-1",
+    monthlyBudgetUsd: 780,
+    notes: "Unit test baseline.",
+  });
 
-  assert.equal(ecsEc2.implementationStatus, "modeled");
-  assert.equal(priced.serviceId, "amazon-ecs-ec2");
+  assert.equal(ecsEc2.implementationStatus, "implemented");
+  assert.equal(priced.serviceId, ECS_EC2_SERVICE_ID);
   assert.equal(priced.region, "ca-central-1");
   assert.equal(priced.monthlyUsd > 0, true);
-  assert.match(priced.details, /ECS on EC2 cluster-month equivalents/);
+  assert.match(priced.details, /ECS on EC2 container host-month equivalents/);
+  assert.equal(built.breakdown.serviceId, ECS_EC2_SERVICE_ID);
+  assert.equal(built.service.serviceCode, "ec2Enhancement");
+  assert.match(built.service.description, /Amazon ECS on EC2 container host baseline/);
+  assert.equal(
+    ecsEc2.modelSavedMonthlyUsd(built.service),
+    built.service.serviceCost.monthly,
+    "ecs on ec2 saved-cost parity",
+  );
 });

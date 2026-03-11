@@ -2,10 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { fetchSavedEstimate, saveEstimate } from "../src/calculator-client.js";
+import { buildEstimatePayloadFromEntries, serviceEntries } from "../src/model.js";
 import {
   buildCalculatorEstimateFromScenario,
   priceArchitecture,
 } from "../src/planner.js";
+import {
+  getServiceDefinition,
+  resolveServiceDefinitionForSavedService,
+} from "../src/services/index.js";
 import { validateEstimatePayload } from "../src/validation.js";
 import {
   allowedBlockingFailureIdsForRegion,
@@ -204,6 +209,44 @@ test(
           `live validation should fully pass on the default region path for ${testCase.name ?? testCase.blueprintId}`,
         );
       }
+    }
+  },
+);
+
+test(
+  "live calculator round-trips preserve ecs on ec2 parity across roadmap regions",
+  {
+    skip: !LIVE_ENABLED,
+  },
+  async () => {
+    const ecsEc2 = getServiceDefinition("amazon-ecs-ec2");
+
+    for (const region of ROADMAP_REGIONS) {
+      const entry = ecsEc2.buildEntry({
+        region,
+        monthlyBudgetUsd: 780,
+        notes: "Live ECS on EC2 parity test.",
+      });
+      const estimate = buildEstimatePayloadFromEntries({
+        estimateName: `LiveTest ECS on EC2 ${region}`,
+        entries: [entry],
+      });
+      const saved = await saveEstimate(estimate);
+      const fetched = await fetchSavedEstimate(saved.savedKey);
+      const savedService = serviceEntries(fetched.estimate?.services)[0];
+
+      assert.ok(savedService, `expected saved service for ${region}`);
+      assert.equal(savedService.serviceCode, "ec2Enhancement");
+      assert.equal(
+        resolveServiceDefinitionForSavedService(savedService)?.id,
+        "amazon-ecs-ec2",
+        `expected ecs on ec2 service resolution for ${region}`,
+      );
+      assert.equal(
+        ecsEc2.modelSavedMonthlyUsd(savedService),
+        savedService.serviceCost.monthly,
+        `expected ecs on ec2 parity for ${region}`,
+      );
     }
   },
 );
