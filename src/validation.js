@@ -53,6 +53,38 @@ function inferTemplateIdFromServices(services) {
   const serviceCodes = serviceCodesFor(services);
 
   if (
+    serviceCodes.includes("amazonKinesisFirehose") &&
+    serviceCodes.includes("amazonS3") &&
+    serviceCodes.includes("awsGlueDataCatalogStorageRequests")
+  ) {
+    return "streaming-data-platform-standard";
+  }
+
+  if (
+    serviceCodes.includes("amazonRedshift") &&
+    serviceCodes.includes("amazonAthena") &&
+    serviceCodes.includes("amazonS3")
+  ) {
+    return "lakehouse-platform-standard";
+  }
+
+  if (
+    serviceCodes.includes("amazonRedshift") &&
+    serviceCodes.includes("amazonS3") &&
+    serviceCodes.includes("awsGlueDataCatalogStorageRequests")
+  ) {
+    return "warehouse-centric-analytics-standard";
+  }
+
+  if (
+    serviceCodes.includes("amazonAthena") &&
+    serviceCodes.includes("awsGlueDataCatalogStorageRequests") &&
+    serviceCodes.includes("awsGlueCrawlers")
+  ) {
+    return "lake-foundation-standard";
+  }
+
+  if (
     serviceCodes.includes("amazonAthena") ||
     serviceCodes.includes("amazonRedshift") ||
     serviceCodes.includes("awsEtlJobsAndDevelopmentEndpoints") ||
@@ -635,14 +667,31 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       .filter((service) => service.supportive)
       .reduce((sum, service) => sum + service.monthlyUsd, 0),
   );
+  const primaryUsd = roundCurrency(
+    scenario.serviceBreakdown
+      .filter((service) =>
+        (architecture.selectedServices ?? []).some(
+          (selected) => selected.serviceId === service.serviceId && selected.required,
+        ),
+      )
+      .reduce((sum, service) => sum + service.monthlyUsd, 0),
+  );
   const supportiveRatio =
     scenario.modeledMonthlyUsd > 0 ? supportiveUsd / scenario.modeledMonthlyUsd : 0;
+  const primaryRatio = scenario.modeledMonthlyUsd > 0 ? primaryUsd / scenario.modeledMonthlyUsd : 0;
   const requiredServiceIds = architecture.selectedServices
     .filter((service) => service.required)
     .map((service) => service.serviceId);
   const selectedServiceIds = architecture.selectedServices.map((service) => service.serviceId);
-  const blueprint = getBlueprint(architecture.blueprintId);
   const serviceFamilies = [...new Set(architecture.selectedServices.map((service) => service.category))];
+  const forbiddenServiceIds = (architecture.excludedDefaults ?? []).filter((serviceId) =>
+    selectedServiceIds.includes(serviceId),
+  );
+  const dominantForbiddenServices = scenario.serviceBreakdown.filter((service) => {
+    const serviceRatio =
+      scenario.modeledMonthlyUsd > 0 ? service.monthlyUsd / scenario.modeledMonthlyUsd : 0;
+    return (architecture.excludedDefaults ?? []).includes(service.serviceId) && serviceRatio >= 0.12;
+  });
   const hasJustificationNotes = hasJustification(architecture.notes);
   const hasWaf = selectedServiceIds.includes("aws-waf-v2");
   const hasCloudWatch = selectedServiceIds.includes("amazon-cloudwatch");
@@ -713,14 +762,101 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       pack: "architecture-completeness",
       id: "architecture.required-service-families",
       title: "Required Service Families",
-      status: blueprint.requiredServiceFamilies.every((family) => serviceFamilies.includes(family))
+      status: architecture.requiredServiceFamilies.every((family) => serviceFamilies.includes(family))
         ? "pass"
         : "fail",
       severity: "error",
       reason: "Each blueprint requires a minimum service-family mix.",
       remediation: "Add the missing service family or choose a blueprint that matches the workload.",
-      details: `Required families: ${blueprint.requiredServiceFamilies.join(", ")}. Present families: ${serviceFamilies.join(", ") || "none"}.`,
+      details: `Required families: ${architecture.requiredServiceFamilies.join(", ")}. Present families: ${serviceFamilies.join(", ") || "none"}.`,
     }),
+    makeRuleResult({
+      pack: "architecture-completeness",
+      id: "architecture.required-capabilities",
+      title: "Required Capabilities",
+      status: (architecture.requiredCapabilities ?? []).length > 0 ? "pass" : "warning",
+      severity: (architecture.requiredCapabilities ?? []).length > 0 ? "info" : "warning",
+      blocking: false,
+      reason: "Architecture validation is clearer when the required workload capabilities are explicit.",
+      remediation: "Define required capabilities for the architecture profile if they are missing.",
+      details:
+        (architecture.requiredCapabilities ?? []).length > 0
+          ? `Required capabilities: ${architecture.requiredCapabilities.join(", ")}.`
+          : "This architecture profile does not declare required capabilities.",
+    }),
+    dominantForbiddenServices.length === 0 && forbiddenServiceIds.length === 0
+      ? makeRuleResult({
+          pack: "architecture-completeness",
+          id: "architecture.forbidden-service-mix",
+          title: "Forbidden Service Mix",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "The selected service mix is coherent with the architecture profile.",
+          remediation: "None.",
+          details: "No forbidden service families were selected for this architecture.",
+        })
+      : makeRuleResult({
+          pack: "architecture-completeness",
+          id: "architecture.forbidden-service-mix",
+          title: "Forbidden Service Mix",
+          status: "fail",
+          severity: "error",
+          reason: "The selected service mix contradicts the intended architecture shape.",
+          remediation: "Remove the conflicting service or choose the architecture family that matches the workload.",
+          details: `Conflicting services: ${[
+            ...forbiddenServiceIds,
+            ...dominantForbiddenServices.map((service) => service.serviceId),
+          ].join(", ")}.`,
+        }),
+    architecture.fitGaps?.length > 0
+      ? makeRuleResult({
+          pack: "architecture-completeness",
+          id: "architecture.pattern-fit-gaps",
+          title: "Pattern Fit Gaps",
+          status: "warning",
+          severity: "warning",
+          blocking: false,
+          reason: "The selected pattern is the nearest supported fit, but it still misses an explicit architectural requirement from the prompt.",
+          remediation: "Resolve the fit gap or document why the nearest-fit pattern is acceptable.",
+          details: architecture.fitGaps.join(" "),
+        })
+      : makeRuleResult({
+          pack: "architecture-completeness",
+          id: "architecture.pattern-fit-gaps",
+          title: "Pattern Fit Gaps",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "No architecture fit gaps were recorded for the selected pattern.",
+          remediation: "None.",
+          details: `Pattern '${architecture.patternId ?? architecture.blueprintId}' cleanly matches the extracted architecture intent.`,
+        }),
+    architecture.requiredUnpricedCapabilities?.length > 0
+      ? makeRuleResult({
+          pack: "architecture-completeness",
+          id: "architecture.required-unpriced-capabilities",
+          title: "Required Unpriced Capabilities",
+          status: "warning",
+          severity: "warning",
+          blocking: false,
+          reason: "The prompt implies required architectural capabilities that are not fully represented in the priced service mix.",
+          remediation: "Surface the capability gap to the user or add pricing support for the missing capability.",
+          details: architecture.requiredUnpricedCapabilities
+            .map((capability) => capability.id)
+            .join(", "),
+        })
+      : makeRuleResult({
+          pack: "architecture-completeness",
+          id: "architecture.required-unpriced-capabilities",
+          title: "Required Unpriced Capabilities",
+          status: "pass",
+          severity: "info",
+          blocking: false,
+          reason: "All required capabilities are represented in the priced architecture.",
+          remediation: "None.",
+          details: "No required-but-unpriced architecture capabilities were recorded.",
+        }),
     makeRuleResult({
       pack: "architecture-completeness",
       id: "architecture.environment-model",
@@ -767,6 +903,40 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       reason: "Supportive services should remain proportionate to the primary workload.",
       remediation: "Trim shared-service overhead or expand the primary workload.",
       details: `Supportive spend ${percent(supportiveRatio)} of modeled total.`,
+    }),
+    makeRuleResult({
+      pack: "funding-readiness",
+      id: "funding.primary-architecture-dominance",
+      title: "Primary Architecture Dominance",
+      status:
+        primaryRatio >= (architecture.minimumPrimaryDominanceRatio ?? 0.55) ? "pass" : "warning",
+      severity:
+        primaryRatio >= (architecture.minimumPrimaryDominanceRatio ?? 0.55) ? "info" : "warning",
+      blocking: false,
+      reason: "Core architecture services should dominate the spend mix for the chosen topology.",
+      remediation: "Increase the core workload scope or remove unrelated add-ons that are dominating the estimate.",
+      details: `Primary architecture services account for ${percent(primaryRatio)} of modeled spend vs expected minimum ${percent(architecture.minimumPrimaryDominanceRatio ?? 0.55)}.`,
+    }),
+    makeRuleResult({
+      pack: "funding-readiness",
+      id: "funding.architecture-budget-fit",
+      title: "Architecture Budget Fit",
+      status:
+        scenario.budgetFit?.status === "fits"
+          ? "pass"
+          : scenario.budgetFit?.status === "incompatible_budget"
+            ? "fail"
+            : "warning",
+      severity:
+        scenario.budgetFit?.status === "fits"
+          ? "info"
+          : scenario.budgetFit?.status === "incompatible_budget"
+            ? "error"
+            : "warning",
+      blocking: scenario.budgetFit?.status === "incompatible_budget",
+      reason: "Budgets should size the architecture, not force a different topology.",
+      remediation: "Adjust the target budget or select a different architecture family if the nearest valid fit is too far away.",
+      details: scenario.budgetFit?.details ?? "No scenario budget-fit details were recorded.",
     }),
     scenario.coverage.modeled.length === 0
       ? makeRuleResult({
@@ -935,7 +1105,7 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
   return summarizeValidation({
     checks,
     assumptions: [
-      `Scenario '${scenario.id}' uses the normalized architecture '${architecture.blueprintId}'.`,
+      `Scenario '${scenario.id}' uses the normalized architecture '${architecture.blueprintId}' and pattern '${architecture.patternId ?? architecture.blueprintId}'.`,
     ],
     parityDetails: draftValidation?.parityDetails ?? [],
   });

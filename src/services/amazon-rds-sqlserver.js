@@ -4,7 +4,7 @@ import { parseNumericValue, regionNameFor, roundCurrency } from "../model.js";
 import {
   buildModeledBudgetPricer,
   buildRoadmapExactCapability,
-  scaledRegionalPricing,
+  regionPriceMultiplier,
 } from "./helpers.js";
 
 const HOURS_PER_MONTH = 730;
@@ -54,7 +54,6 @@ const SQL_SERVER_PRICING_MULTIPLIERS = {
 };
 const SQL_SERVER_PROFILES = [
   {
-    maxBudgetUsd: 1_200,
     instanceType: "db.m5.large",
     deploymentOption: "Single-AZ",
     databaseEdition: "Standard",
@@ -63,7 +62,6 @@ const SQL_SERVER_PROFILES = [
     pricingModel: "OnDemand",
   },
   {
-    maxBudgetUsd: 2_100,
     instanceType: "db.m5.xlarge",
     deploymentOption: "Single-AZ",
     databaseEdition: "Standard",
@@ -72,27 +70,75 @@ const SQL_SERVER_PROFILES = [
     pricingModel: "OnDemand",
   },
   {
-    maxBudgetUsd: 5_000,
-    instanceType: "db.m5.2xlarge",
+    instanceType: "db.m5.xlarge",
     deploymentOption: "Multi-AZ",
+    databaseEdition: "Standard",
+    licenseModel: "License Included",
+    storageGb: 200,
+    pricingModel: "OnDemand",
+  },
+  {
+    instanceType: "db.m5.2xlarge",
+    deploymentOption: "Single-AZ",
     databaseEdition: "Standard",
     licenseModel: "License Included",
     storageGb: 250,
     pricingModel: "OnDemand",
   },
   {
-    maxBudgetUsd: Number.POSITIVE_INFINITY,
-    instanceType: "db.m5.4xlarge",
+    instanceType: "db.m5.2xlarge",
     deploymentOption: "Multi-AZ",
+    databaseEdition: "Standard",
+    licenseModel: "License Included",
+    storageGb: 300,
+    pricingModel: "OnDemand",
+  },
+  {
+    instanceType: "db.m5.4xlarge",
+    deploymentOption: "Single-AZ",
     databaseEdition: "Standard",
     licenseModel: "License Included",
     storageGb: 400,
     pricingModel: "OnDemand",
   },
+  {
+    instanceType: "db.m5.4xlarge",
+    deploymentOption: "Multi-AZ",
+    databaseEdition: "Standard",
+    licenseModel: "License Included",
+    storageGb: 500,
+    pricingModel: "OnDemand",
+  },
 ];
 
+function scaleRateTable(rateTable, multiplier) {
+  return Object.fromEntries(
+    Object.entries(rateTable).map(([key, rate]) => [key, roundCurrency(rate * multiplier)]),
+  );
+}
+
 function sqlServerPricingFor(region) {
-  return scaledRegionalPricing(SQL_SERVER_PRICING, region, "RDS SQL Server exact pricing");
+  const exactPricing = SQL_SERVER_PRICING[region];
+
+  if (exactPricing) {
+    return exactPricing;
+  }
+
+  const basePricing = SQL_SERVER_PRICING["us-east-1"];
+  const multiplier = regionPriceMultiplier(region);
+
+  if (!basePricing || !multiplier) {
+    throw new Error(`RDS SQL Server exact pricing is not implemented for region '${region}'.`);
+  }
+
+  return {
+    instanceHourly: scaleRateTable(basePricing.instanceHourly, multiplier),
+    editionMultiplier: { ...basePricing.editionMultiplier },
+    licenseMultiplier: { ...basePricing.licenseMultiplier },
+    deploymentMultiplier: { ...basePricing.deploymentMultiplier },
+    storagePerGbMonth: scaleRateTable(basePricing.storagePerGbMonth, multiplier),
+    iopsPerMonth: scaleRateTable(basePricing.iopsPerMonth, multiplier),
+  };
 }
 
 function normalizeDeploymentOption(value) {
@@ -207,16 +253,17 @@ function sqlServerMonthlyUsd({
 
 function sqlServerProfileForBudget(region, monthlyBudgetUsd) {
   const budget = Math.max(parseNumericValue(monthlyBudgetUsd, 0), 0);
-  const profile = SQL_SERVER_PROFILES.find((candidate) => budget <= candidate.maxBudgetUsd);
-  const selected = profile ?? SQL_SERVER_PROFILES.at(-1);
-
-  return {
-    ...selected,
+  const candidates = SQL_SERVER_PROFILES.map((candidate) => ({
+    ...candidate,
     monthlyUsd: sqlServerMonthlyUsd({
       region,
-      ...selected,
+      ...candidate,
     }),
-  };
+  })).sort(
+    (left, right) => Math.abs(left.monthlyUsd - budget) - Math.abs(right.monthlyUsd - budget),
+  );
+
+  return candidates[0];
 }
 
 function pricingSummaryLabel(pricingModel) {

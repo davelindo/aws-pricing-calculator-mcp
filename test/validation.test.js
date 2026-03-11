@@ -100,9 +100,9 @@ test("validateEstimatePayload infers windows-heavy from saved services", () => {
   );
 });
 
-test("validateEstimatePayload infers enterprise-data-lake-standard from lake services", () => {
+test("validateEstimatePayload infers streaming-data-platform-standard when firehose is present", () => {
   const priced = priceArchitecture({
-    blueprintId: "enterprise-data-lake",
+    blueprintId: "lakehouse-platform",
     region: "us-east-1",
     targetMonthlyUsd: 25000,
     serviceIds: ["amazon-kinesis-firehose"],
@@ -116,11 +116,11 @@ test("validateEstimatePayload infers enterprise-data-lake-standard from lake ser
     estimate: created.estimate,
   });
 
-  assert.equal(validation.templateId, "enterprise-data-lake-standard");
+  assert.equal(validation.templateId, "streaming-data-platform-standard");
   assert.equal(validation.passed, true);
   assert.ok(
     validation.assumptions.some((assumption) =>
-      assumption.includes("Template was inferred as 'enterprise-data-lake-standard'"),
+      assumption.includes("Template was inferred as 'streaming-data-platform-standard'"),
     ),
   );
 });

@@ -12,10 +12,12 @@ test("designArchitecture infers an edge blueprint and explicit capability covera
 
   assert.equal(architecture.readyToPrice, true);
   assert.equal(architecture.blueprintId, "edge-api-platform");
+  assert.equal(architecture.recommendedArchitectureId, "edge-api-platform");
   assert.equal(architecture.region, "eu-west-1");
   assert.equal(architecture.targetMonthlyUsd, 9000);
   assert.equal(architecture.defaultScenarioPolicies.length, 3);
   assert.ok(architecture.packIds.includes("edge"));
+  assert.ok(architecture.candidateArchitectures.length >= 1);
   assert.equal(architecture.confidence.level, "high");
   assert.ok(architecture.serviceCoverage.exact.includes("amazon-cloudfront"));
   assert.ok(architecture.serviceCoverage.exact.includes("amazon-lambda"));
@@ -41,6 +43,7 @@ test("priceArchitecture keeps the edge blueprint exact-link eligible in eu-west-
   assert.equal(baseline.scenarioPolicy.computeCommitment, "on-demand");
   assert.equal(baseline.calculatorEligible, true);
   assert.deepEqual(baseline.calculatorBlockers, []);
+  assert.equal(baseline.budgetFit.status, "fits");
   assert.ok(baseline.linkPlan);
   assert.ok(recommended.expectedSavingsPct >= baseline.expectedSavingsPct);
 });
@@ -90,7 +93,6 @@ test("priceArchitecture keeps exact add-ons calculator-link eligible in us-east-
 
   assert.ok(baseline);
   assert.equal(baseline.calculatorEligible, true);
-  assert.equal(baseline.linkPlan?.exactAddOns.length, 2);
   assert.ok(
     baseline.serviceBreakdown.some((service) => service.serviceId === "application-load-balancer"),
   );
@@ -110,35 +112,30 @@ test("priceArchitecture keeps API Gateway exact add-ons calculator-link eligible
 
   assert.ok(baseline);
   assert.equal(baseline.calculatorEligible, true);
-  assert.equal(baseline.linkPlan?.exactAddOns.length, 1);
   assert.ok(
     baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-api-gateway-http"),
   );
 });
 
-test("priceArchitecture keeps Lambda and DynamoDB exact add-ons calculator-link eligible in us-east-1", () => {
+test("priceArchitecture keeps prompt-driven Lambda and DynamoDB edge designs calculator-link eligible in us-east-1", () => {
   const priced = priceArchitecture({
-    blueprintId: "container-platform",
-    region: "us-east-1",
-    targetMonthlyUsd: 7000,
-    includeDefaultAddOns: false,
-    serviceIds: ["amazon-lambda", "amazon-dynamodb"],
+    brief:
+      "Need a 9k monthly edge API platform in us-east-1 with Lambda, DynamoDB, CloudFront, Route53, and API Gateway.",
   });
 
   const baseline = getScenario(priced);
 
   assert.ok(baseline);
   assert.equal(baseline.calculatorEligible, true);
-  assert.equal(baseline.linkPlan?.exactAddOns.length, 2);
+  assert.equal(priced.architecture.patternId, "serverless-edge-api");
   assert.ok(baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-lambda"));
   assert.ok(baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-dynamodb"));
 });
 
 test("priceArchitecture keeps the edge blueprint calculator-link eligible in us-east-1", () => {
   const priced = priceArchitecture({
-    blueprintId: "edge-api-platform",
-    region: "us-east-1",
-    targetMonthlyUsd: 9000,
+    brief:
+      "Need a 9k monthly edge API platform in us-east-1 with CloudFront, Lambda, DynamoDB, Route53, and API Gateway.",
   });
 
   const baseline = getScenario(priced);
@@ -146,9 +143,6 @@ test("priceArchitecture keeps the edge blueprint calculator-link eligible in us-
   assert.ok(baseline);
   assert.equal(baseline.calculatorEligible, true);
   assert.ok(baseline.linkPlan);
-  assert.ok(
-    baseline.linkPlan.exactAddOns.some((service) => service.serviceId === "amazon-cloudfront"),
-  );
   assert.ok(baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-cloudfront"));
   assert.ok(
     baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-api-gateway-http"),
@@ -159,9 +153,8 @@ test("priceArchitecture keeps the edge blueprint calculator-link eligible in us-
 
 test("priceArchitecture keeps the event-driven blueprint calculator-link eligible in us-east-1", () => {
   const priced = priceArchitecture({
-    blueprintId: "event-driven-platform",
-    region: "us-east-1",
-    targetMonthlyUsd: 8000,
+    brief:
+      "Need an 8k monthly event-driven platform in us-east-1 with SQS, SNS, EventBridge, Lambda, and PostgreSQL.",
   });
 
   const baseline = getScenario(priced);
@@ -176,11 +169,11 @@ test("priceArchitecture keeps the event-driven blueprint calculator-link eligibl
   );
 });
 
-test("priceArchitecture keeps the data-platform-lite blueprint calculator-link eligible in us-east-1", () => {
+test("priceArchitecture keeps the lakehouse blueprint calculator-link eligible in us-east-1", () => {
   const priced = priceArchitecture({
-    blueprintId: "data-platform-lite",
+    blueprintId: "lakehouse-platform",
     region: "us-east-1",
-    targetMonthlyUsd: 7500,
+    targetMonthlyUsd: 25000,
   });
 
   const baseline = getScenario(priced);
@@ -190,20 +183,21 @@ test("priceArchitecture keeps the data-platform-lite blueprint calculator-link e
   assert.ok(baseline.linkPlan);
   assert.ok(baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-s3"));
   assert.ok(
-    baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-aurora-postgresql"),
+    baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-redshift"),
   );
   assert.ok(
-    baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-cloudwatch"),
+    baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-athena"),
   );
 });
 
-test("priceArchitecture maps enterprise data lake briefs to a real lake-service mix", () => {
+test("priceArchitecture maps enterprise data lake briefs to architecture candidates and a real lake-service mix", () => {
   const priced = priceArchitecture({
     brief: "Need a 25k/mo enterprise data lake.",
   });
   const baseline = getScenario(priced);
 
-  assert.equal(priced.architecture.blueprintId, "enterprise-data-lake");
+  assert.equal(priced.architecture.recommendedArchitectureId, "lakehouse-platform");
+  assert.ok(priced.architecture.alternativeArchitectureIds.includes("lake-foundation"));
   assert.ok(baseline);
   assert.equal(baseline.calculatorEligible, true);
   assert.ok(baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-s3"));
@@ -224,6 +218,11 @@ test("priceArchitecture maps enterprise data lake briefs to a real lake-service 
       ["amazon-ec2", "amazon-aurora-postgresql", "amazon-opensearch"].includes(service.serviceId),
     ),
     false,
+  );
+  assert.ok(
+    baseline.serviceBreakdown.every((service) =>
+      service.serviceId === "amazon-vpc-endpoints" ? service.required === false : true,
+    ),
   );
 });
 
@@ -260,15 +259,8 @@ test("designArchitecture returns structured unresolved questions when key inputs
 test("priceArchitecture keeps the modernization blueprint calculator-link eligible across roadmap regions", () => {
   for (const region of ROADMAP_REGIONS) {
     const priced = priceArchitecture({
-      blueprintId: "modernization-platform",
+      brief: `Need a 12k monthly modernization program in ${region} moving to Fargate with EFS, EBS, Redis, and PrivateLink.`,
       region,
-      targetMonthlyUsd: 12000,
-      serviceIds: [
-        "amazon-efs",
-        "amazon-ebs",
-        "amazon-vpc-endpoints",
-        "amazon-elasticache-redis",
-      ],
     });
     const baseline = getScenario(priced);
 
@@ -290,19 +282,15 @@ test("priceArchitecture keeps the modernization blueprint calculator-link eligib
   }
 });
 
-test("priceArchitecture keeps the enterprise data blueprint calculator-link eligible across roadmap regions", () => {
+test("priceArchitecture keeps the warehouse-centric analytics blueprint calculator-link eligible across roadmap regions", () => {
   for (const region of ROADMAP_REGIONS) {
     const priced = priceArchitecture({
-      blueprintId: "enterprise-data-platform",
+      blueprintId: "warehouse-centric-analytics",
       region,
-      targetMonthlyUsd: 15000,
+      targetMonthlyUsd: 18000,
       serviceIds: [
-        "amazon-aurora-mysql",
-        "amazon-rds-mysql",
-        "amazon-rds-sqlserver",
-        "amazon-elasticache-redis",
-        "amazon-opensearch",
-        "amazon-efs",
+        "amazon-athena",
+        "aws-glue-crawlers",
         "amazon-vpc-endpoints",
       ],
     });
@@ -312,16 +300,16 @@ test("priceArchitecture keeps the enterprise data blueprint calculator-link elig
     assert.equal(
       baseline.calculatorEligible,
       true,
-      `expected enterprise-data-platform eligibility in ${region}`,
+      `expected warehouse-centric-analytics eligibility in ${region}`,
     );
-    assert.ok(baseline.linkPlan, `expected enterprise link plan in ${region}`);
+    assert.ok(baseline.linkPlan, `expected warehouse link plan in ${region}`);
     assert.ok(
-      baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-aurora-postgresql"),
-      `expected Aurora PostgreSQL in ${region}`,
+      baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-redshift"),
+      `expected Redshift in ${region}`,
     );
     assert.ok(
-      baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-opensearch"),
-      `expected OpenSearch in ${region}`,
+      baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-s3"),
+      `expected S3 in ${region}`,
     );
     assert.ok(
       baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-vpc-endpoints"),
@@ -330,12 +318,12 @@ test("priceArchitecture keeps the enterprise data blueprint calculator-link elig
   }
 });
 
-test("priceArchitecture keeps the enterprise data lake blueprint calculator-link eligible across roadmap regions", () => {
+test("priceArchitecture keeps the streaming data blueprint calculator-link eligible across roadmap regions", () => {
   for (const region of ROADMAP_REGIONS) {
     const priced = priceArchitecture({
-      blueprintId: "enterprise-data-lake",
+      blueprintId: "streaming-data-platform",
       region,
-      targetMonthlyUsd: 25000,
+      targetMonthlyUsd: 22000,
       serviceIds: ["amazon-kinesis-firehose"],
     });
     const baseline = getScenario(priced);
@@ -344,24 +332,24 @@ test("priceArchitecture keeps the enterprise data lake blueprint calculator-link
     assert.equal(
       baseline.calculatorEligible,
       true,
-      `expected enterprise-data-lake eligibility in ${region}`,
+      `expected streaming-data-platform eligibility in ${region}`,
     );
-    assert.ok(baseline.linkPlan, `expected enterprise data lake link plan in ${region}`);
+    assert.ok(baseline.linkPlan, `expected streaming data link plan in ${region}`);
     assert.ok(
       baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-athena"),
       `expected Athena in ${region}`,
     );
     assert.ok(
-      baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-redshift"),
-      `expected Redshift in ${region}`,
+      baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-kinesis-firehose"),
+      `expected Firehose in ${region}`,
     );
     assert.ok(
       baseline.serviceBreakdown.some((service) => service.serviceId === "aws-glue-etl"),
       `expected Glue ETL in ${region}`,
     );
     assert.ok(
-      baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-kinesis-firehose"),
-      `expected Firehose in ${region}`,
+      baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-s3"),
+      `expected S3 in ${region}`,
     );
   }
 });

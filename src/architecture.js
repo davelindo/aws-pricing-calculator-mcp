@@ -3,10 +3,13 @@ import crypto from "node:crypto";
 import {
   DEFAULT_REGION,
   DESIGN_REGIONS,
+  candidateBlueprintIds,
+  getArchitecturePattern,
   getBlueprint,
   getServiceDefinition,
   getServiceRegionCapability,
   getTemplate,
+  listArchitecturePatterns,
   listServiceCatalog,
   resolveBlueprintIdForTemplate,
   supportedBlueprintIds,
@@ -16,9 +19,11 @@ import {
   buildComputePlan,
   buildEstimatePayloadFromEntries,
   buildNatPlan,
+  modelEc2MonthlyUsd,
   modelRdsMonthlyUsd,
   normalizeEnvironmentSplit,
   modelEksMonthlyUsd,
+  pricingFor,
   rdsPricingModelMultiplier,
   roundCurrency,
   selectedRdsTier,
@@ -33,6 +38,53 @@ const MODERNIZATION_SIGNAL_PATTERNS = [/moderni/i, /migrat/i, /fargate/i, /ecs/i
 const UNSUPPORTED_DATABASES = [
   { pattern: /mariadb/i, label: "MariaDB" },
   { pattern: /oracle/i, label: "Oracle" },
+];
+const SHARED_POSTGRES_BUDGET_PROFILES = [
+  {
+    instanceType: "db.t4g.large",
+    deploymentOption: "Single-AZ",
+    storageGb: 100,
+  },
+  {
+    instanceType: "db.t4g.large",
+    deploymentOption: "Multi-AZ",
+    storageGb: 100,
+  },
+  {
+    instanceType: "db.r6g.large",
+    deploymentOption: "Single-AZ",
+    storageGb: 150,
+  },
+  {
+    instanceType: "db.r6g.large",
+    deploymentOption: "Multi-AZ",
+    storageGb: 150,
+  },
+  {
+    instanceType: "db.r6g.xlarge",
+    deploymentOption: "Single-AZ",
+    storageGb: 200,
+  },
+  {
+    instanceType: "db.r6g.xlarge",
+    deploymentOption: "Multi-AZ",
+    storageGb: 200,
+  },
+  {
+    instanceType: "db.r6g.2xlarge",
+    deploymentOption: "Single-AZ",
+    storageGb: 300,
+  },
+  {
+    instanceType: "db.r6g.2xlarge",
+    deploymentOption: "Multi-AZ",
+    storageGb: 300,
+  },
+  {
+    instanceType: "db.r6g.4xlarge",
+    deploymentOption: "Multi-AZ",
+    storageGb: 500,
+  },
 ];
 
 function clampNumber(value, minimum, maximum) {
@@ -156,10 +208,704 @@ function inferOperatingSystem({ brief, explicitOperatingSystem, blueprint, assum
     confidence: 0.65,
   };
 }
+
+const ARCHITECTURE_SIGNAL_PATTERNS = {
+  containers: [/eks/i, /kubernetes/i, /\bcontainer/i, /\bcontainers/i, /argocd/i],
+  kubernetes: [/eks/i, /kubernetes/i, /argocd/i],
+  "vm-runtime": [/\bec2\b/i, /\bvm\b/i, /\bfleet\b/i, /\bvirtual machine/i],
+  linux: [/\blinux\b/i],
+  windows: [/\bwindows\b/i, /\biis\b/i, /active directory/i, /\.net\b/i, /\bdotnet\b/i],
+  edge: [/\bedge\b/i, /cloudfront/i, /cdn/i, /route ?53/i],
+  api: [/\bapi\b/i, /gateway/i],
+  serverless: [/lambda/i, /serverless/i],
+  eventing: [/event/i, /eventbridge/i, /\bsqs\b/i, /\bsns\b/i, /\bqueue/i, /async/i],
+  async: [/async/i, /\bqueue/i, /event/i],
+  queueing: [/\bsqs\b/i, /\bsns\b/i, /\bqueue/i],
+  modernization: [/moderni/i, /migrat/i, /refactor/i, /landing zone/i, /fargate/i, /\becs\b/i],
+  migration: [/migrat/i, /landing zone/i, /moderni/i],
+  "data-lake": [/data lake/i, /\blake\b/i, /athena/i, /glue/i, /catalog/i, /crawler/i],
+  lakehouse: [/lakehouse/i],
+  warehouse: [/warehouse/i, /redshift/i, /\bbi\b/i, /reporting/i],
+  analytics: [/analytics/i, /athena/i, /redshift/i, /query/i],
+  streaming: [/stream/i, /streaming/i, /real[- ]?time/i, /firehose/i],
+  web: [/\bweb\b/i, /\bsite\b/i, /\bapp\b/i],
+  relational: [/postgres/i, /postgresql/i, /aurora/i, /\brds\b/i, /sql server/i, /mysql/i],
+  microsoft: [/windows/i, /microsoft/i, /active directory/i, /sql server/i],
+};
+
 function normalizeBrief(brief) {
   return String(brief ?? "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function operatingSystemHintFromBrief(brief, explicitOperatingSystem = null) {
+  if (explicitOperatingSystem) {
+    return explicitOperatingSystem;
+  }
+
+  const lower = normalizeBrief(brief).toLowerCase();
+
+  if (ARCHITECTURE_SIGNAL_PATTERNS.windows.some((pattern) => pattern.test(lower))) {
+    return "windows";
+  }
+
+  if (
+    ARCHITECTURE_SIGNAL_PATTERNS.linux.some((pattern) => pattern.test(lower)) ||
+    ARCHITECTURE_SIGNAL_PATTERNS.containers.some((pattern) => pattern.test(lower))
+  ) {
+    return "linux";
+  }
+
+  return null;
+}
+
+function signalsFromServiceIds(serviceIds = []) {
+  const lowerJoined = serviceIds.join(" ").toLowerCase();
+  const matched = [];
+
+  for (const [signal, patterns] of Object.entries(ARCHITECTURE_SIGNAL_PATTERNS)) {
+    if (patterns.some((pattern) => pattern.test(lowerJoined))) {
+      matched.push(signal);
+    }
+  }
+
+  return matched;
+}
+
+function deriveArchitectureSignals({ brief, operatingSystem, serviceIds = [] }) {
+  const normalized = normalizeBrief(brief).toLowerCase();
+  const matched = new Set(signalsFromServiceIds(serviceIds));
+
+  for (const [signal, patterns] of Object.entries(ARCHITECTURE_SIGNAL_PATTERNS)) {
+    if (patterns.some((pattern) => pattern.test(normalized))) {
+      matched.add(signal);
+    }
+  }
+
+  const operatingSystemHint = operatingSystemHintFromBrief(normalized, operatingSystem);
+
+  if (operatingSystemHint === "windows") {
+    matched.add("windows");
+    matched.add("microsoft");
+  } else if (operatingSystemHint === "linux") {
+    matched.add("linux");
+  }
+
+  return {
+    operatingSystemHint,
+    matched: [...matched],
+    hasBrief: normalized.length > 0,
+  };
+}
+
+function extractHardConstraints({ brief, serviceIds = [], operatingSystem }) {
+  const normalized = normalizeBrief(brief).toLowerCase();
+  const joinedServiceIds = serviceIds.join(" ").toLowerCase();
+  const hasToken = (pattern) => pattern.test(normalized) || pattern.test(joinedServiceIds);
+  const requestedAlbOrigins = hasToken(/\balb origins?\b|origin app|origin-backed|alb-backed origins?/i);
+  const requestedDatabase =
+    hasToken(/sql server/i)
+      ? "sqlserver"
+      : hasToken(/postgres|postgresql|aurora|rds/i)
+        ? "postgresql"
+        : null;
+  const requiresServerless =
+    hasToken(/serverless|lambda/i) &&
+    !hasToken(/eks|kubernetes|container|containers|ecs|fargate/i) &&
+    !requestedAlbOrigins;
+  const requiresPrivateConnectivity = hasToken(/privatelink|private link|private api|private service/i);
+  const requiresGovernance = hasToken(/governed|governance|lake formation/i);
+  const requiresStreamProcessing = hasToken(/real[- ]?time|stream(?:ing)? analytics|continuous/i);
+  const requiresFargatePrimary = hasToken(/fargate/i);
+
+  return {
+    requiresServerless,
+    requiresPrivateConnectivity,
+    requiresGovernance,
+    requiresStreamProcessing,
+    requiresFargatePrimary,
+    requestedDatabase,
+    requestedAlbOrigins,
+    requestedCdn: hasToken(/cdn|cloudfront/i),
+    requestedRoute53: hasToken(/route ?53/i),
+    requestedWaf: hasToken(/\bwaf\b/i),
+    requestedEventBridge: hasToken(/eventbridge/i),
+    requestedQueueing: hasToken(/\bsqs\b|\bsns\b|\bqueue\b|async/i),
+    requestedSqlServer: requestedDatabase === "sqlserver",
+    requestedFiles: hasToken(/fsx|smb|file share/i),
+    requestedStreaming: hasToken(/stream|streaming|firehose/i),
+    requestedSearch: hasToken(/opensearch|search/i),
+    operatingSystemHint: operatingSystemHintFromBrief(normalized, operatingSystem),
+  };
+}
+
+function defaultPatternForBlueprint(blueprint) {
+  return {
+    id: `${blueprint.id}.default`,
+    blueprintId: blueprint.id,
+    title: blueprint.title,
+    description: blueprint.description,
+    templateId: blueprint.templateId,
+    coreStrategy: null,
+    environmentModel: blueprint.environmentModel,
+    defaultOperatingSystem: blueprint.defaultOperatingSystem,
+    keywords: [],
+    traits: [],
+    requiredCapabilities: [...(blueprint.requiredCapabilities ?? [])],
+    budgetGuidance: blueprint.budgetGuidance ? { ...blueprint.budgetGuidance } : null,
+    requiredServiceFamilies: [...(blueprint.requiredServiceFamilies ?? [])],
+    requiredServiceIds: [...(blueprint.requiredServiceIds ?? [])],
+    defaultAddOnServiceIds: [...(blueprint.defaultAddOnServiceIds ?? [])],
+    optionalServiceIds: [...(blueprint.optionalServiceIds ?? [])],
+    addOnAllocations: { ...(blueprint.addOnAllocations ?? {}) },
+    primaryServiceIds: [...(blueprint.primaryServiceIds ?? [])],
+    forbiddenServiceIds: [...(blueprint.forbiddenServiceIds ?? [])],
+    coreBudgetWeights: blueprint.coreBudgetWeights ? { ...blueprint.coreBudgetWeights } : null,
+    serviceRoles: { ...(blueprint.serviceRoles ?? {}) },
+    requiredUnpricedCapabilities: [],
+  };
+}
+
+function resolveArchitectureProfile(blueprint, pattern) {
+  return {
+    ...blueprint,
+    patternId: pattern.id,
+    patternTitle: pattern.title,
+    patternDescription: pattern.description,
+    templateId: pattern.templateId ?? blueprint.templateId,
+    environmentModel: pattern.environmentModel ?? blueprint.environmentModel,
+    defaultOperatingSystem: pattern.defaultOperatingSystem ?? blueprint.defaultOperatingSystem,
+    requiredCapabilities: pattern.requiredCapabilities ?? [...(blueprint.requiredCapabilities ?? [])],
+    budgetGuidance: pattern.budgetGuidance ?? (blueprint.budgetGuidance ? { ...blueprint.budgetGuidance } : null),
+    requiredServiceFamilies:
+      pattern.requiredServiceFamilies ?? [...(blueprint.requiredServiceFamilies ?? [])],
+    requiredServiceIds: pattern.requiredServiceIds ?? [...(blueprint.requiredServiceIds ?? [])],
+    defaultAddOnServiceIds:
+      pattern.defaultAddOnServiceIds ?? [...(blueprint.defaultAddOnServiceIds ?? [])],
+    optionalServiceIds: pattern.optionalServiceIds ?? [...(blueprint.optionalServiceIds ?? [])],
+    addOnAllocations: {
+      ...(blueprint.addOnAllocations ?? {}),
+      ...(pattern.addOnAllocations ?? {}),
+    },
+    primaryServiceIds: pattern.primaryServiceIds ?? [...(blueprint.primaryServiceIds ?? [])],
+    forbiddenServiceIds:
+      pattern.forbiddenServiceIds ?? [...(blueprint.forbiddenServiceIds ?? [])],
+    coreBudgetWeights: pattern.coreBudgetWeights ?? blueprint.coreBudgetWeights ?? null,
+    coreStrategy: pattern.coreStrategy ?? getTemplate(pattern.templateId ?? blueprint.templateId).coreStrategy ?? null,
+    serviceRoles: {
+      ...(blueprint.serviceRoles ?? {}),
+      ...(pattern.serviceRoles ?? {}),
+    },
+    requiredUnpricedCapabilities: pattern.requiredUnpricedCapabilities ?? [],
+    patternTraits: [...(pattern.traits ?? [])],
+  };
+}
+
+function patternKeywordScore(briefLower, pattern) {
+  return (pattern.keywords ?? []).reduce((score, keyword) => {
+    if (!briefLower.includes(keyword.toLowerCase())) {
+      return score;
+    }
+
+    return score + (keyword.includes(" ") ? 7 : 4);
+  }, 0);
+}
+
+function scorePatternCandidate({
+  blueprint,
+  pattern,
+  briefLower,
+  hardConstraints,
+  targetMonthlyUsd,
+  serviceIds = [],
+}) {
+  const profile = resolveArchitectureProfile(blueprint, pattern);
+  const requestedServices = new Set(serviceIds ?? []);
+  const budgetFit = budgetFitForBlueprint(profile, targetMonthlyUsd);
+  const rationale = [];
+  const keywordScore = patternKeywordScore(briefLower, pattern);
+  let score = keywordScore;
+
+  if (!pattern.id.endsWith(".default") && keywordScore > 0) {
+    score += 8;
+  }
+
+  for (const serviceId of profile.requiredServiceIds) {
+    if (requestedServices.has(serviceId)) {
+      score += 8;
+      rationale.push(`Explicitly requested ${serviceId}.`);
+    }
+  }
+
+  if (hardConstraints.requestedDatabase === "sqlserver") {
+    score += profile.patternTraits.includes("sqlserver") ? 28 : -45;
+  } else if (profile.patternTraits.includes("sqlserver")) {
+    score -= 18;
+  }
+
+  if (hardConstraints.requiresServerless) {
+    score += profile.patternTraits.includes("serverless") ? 35 : -50;
+  }
+
+  if (hardConstraints.requiresPrivateConnectivity) {
+    score += profile.patternTraits.includes("private") ? 28 : -40;
+  }
+
+  if (hardConstraints.requiresFargatePrimary) {
+    score += profile.patternTraits.includes("fargate") ? 28 : -45;
+  }
+
+  if (hardConstraints.requiresGovernance) {
+    score += profile.patternTraits.includes("governed") ? 24 : -28;
+  }
+
+  if (hardConstraints.requiresStreamProcessing) {
+    score += profile.patternTraits.includes("stream-processing") ? 24 : -30;
+  }
+
+  if (hardConstraints.requestedAlbOrigins) {
+    score += pattern.id === "cloudfront-alb-origin-app" ? 42 : 0;
+  }
+
+  if (hardConstraints.requestedEventBridge) {
+    score += pattern.id === "event-bus-integration-platform" ? 40 : pattern.id === "async-worker-platform" ? -6 : 0;
+  }
+
+  if (hardConstraints.requestedQueueing) {
+    score += pattern.id === "async-worker-platform" || pattern.id === "pubsub-fanout-platform" ? 10 : 0;
+  }
+
+  if (hardConstraints.requestedFiles) {
+    score += pattern.id === "windows-files-app" ? 18 : 0;
+  }
+
+  if (hardConstraints.requestedSearch) {
+    score += pattern.id === "eks-search-content-platform" ? 28 : 0;
+  }
+
+  if (hardConstraints.requestedCdn) {
+    score += pattern.id === "ec2-web-with-cdn" ? 28 : 0;
+  }
+
+  if (hardConstraints.requiresPrivateConnectivity) {
+    score +=
+      pattern.id === "eks-private-service" || pattern.id === "ec2-web-with-private-service"
+        ? 18
+        : 0;
+  }
+
+  if (/\bapi gateway\b|\bapi\b/.test(briefLower)) {
+    score += pattern.id === "eks-api-front-door" ? 20 : 0;
+  }
+
+  if (/fanout|notifications?|pubsub/.test(briefLower)) {
+    score += pattern.id === "pubsub-fanout-platform" ? 36 : 0;
+  }
+
+  if (/async|jobs?|workers?/.test(briefLower)) {
+    score += pattern.id === "async-worker-platform" ? 20 : 0;
+  }
+
+  if (/integration/.test(briefLower)) {
+    score += pattern.id === "event-bus-integration-platform" ? 18 : 0;
+  }
+
+  if (budgetFit.status === "fits") {
+    score += 4;
+  }
+
+  return {
+    id: pattern.id,
+    title: pattern.title,
+    description: pattern.description,
+    fitScore: score,
+    budgetFit,
+    requiredServiceIds: [...profile.requiredServiceIds],
+    primaryServiceIds: [...profile.primaryServiceIds],
+    forbiddenServiceIds: [...profile.forbiddenServiceIds],
+    requiredUnpricedCapabilities: profile.requiredUnpricedCapabilities.map((capability) => ({
+      ...capability,
+    })),
+    traits: [...profile.patternTraits],
+    rationale: rationale.length > 0 ? rationale : ["Pattern matched the strongest architecture signals."],
+  };
+}
+
+function buildPatternCandidates({
+  blueprint,
+  brief,
+  targetMonthlyUsd,
+  serviceIds = [],
+  hardConstraints,
+}) {
+  const briefLower = normalizeBrief(brief).toLowerCase();
+  const patterns = [
+    defaultPatternForBlueprint(blueprint),
+    ...listArchitecturePatterns(blueprint.id),
+  ];
+
+  return patterns
+    .map((pattern) =>
+      scorePatternCandidate({
+        blueprint,
+        pattern,
+        briefLower,
+        hardConstraints,
+        targetMonthlyUsd,
+        serviceIds,
+      }),
+    )
+    .sort((left, right) => right.fitScore - left.fitScore);
+}
+
+function materializePattern(blueprint, patternId) {
+  return patternId.endsWith(".default")
+    ? defaultPatternForBlueprint(blueprint)
+    : getArchitecturePattern(blueprint.id, patternId);
+}
+
+function patternFitGaps(profile, hardConstraints) {
+  const fitGaps = [];
+  const excludedDefaults = [];
+
+  if (hardConstraints.requiresServerless && !profile.patternTraits.includes("serverless")) {
+    fitGaps.push(
+      "The prompt implies a serverless runtime, but the selected pattern still requires an origin/runtime service.",
+    );
+  }
+
+  if (
+    hardConstraints.requiresPrivateConnectivity &&
+    profile.architectureFamily !== "data-platform" &&
+    !profile.patternTraits.includes("private") &&
+    !profile.requiredServiceIds.includes("amazon-vpc-endpoints") &&
+    !profile.optionalServiceIds.includes("amazon-vpc-endpoints")
+  ) {
+    fitGaps.push(
+      "The prompt implies a private-connectivity pattern, but the selected architecture is not private-ingress-native.",
+    );
+  }
+
+  if (
+    hardConstraints.requestedDatabase === "sqlserver" &&
+    !profile.requiredServiceIds.includes("amazon-rds-sqlserver")
+  ) {
+    fitGaps.push(
+      "The prompt explicitly requests SQL Server, but the selected pattern does not center SQL Server.",
+    );
+  }
+
+  if (
+    hardConstraints.requiresFargatePrimary &&
+    !profile.patternTraits.includes("fargate")
+  ) {
+    fitGaps.push(
+      "The prompt explicitly requests Fargate, but the selected pattern is not Fargate-led.",
+    );
+  }
+
+  if (
+    hardConstraints.requestedAlbOrigins &&
+    profile.blueprintId === "edge-api-platform" &&
+    profile.patternId !== "cloudfront-alb-origin-app"
+  ) {
+    fitGaps.push(
+      "The prompt references ALB origins, but the selected edge pattern is not origin-app centered.",
+    );
+  }
+
+  if (hardConstraints.requiresPrivateConnectivity) {
+    if (profile.forbiddenServiceIds.includes("amazon-cloudfront")) {
+      excludedDefaults.push("amazon-cloudfront");
+    }
+    if (profile.forbiddenServiceIds.includes("application-load-balancer")) {
+      excludedDefaults.push("application-load-balancer");
+    }
+    if (profile.forbiddenServiceIds.includes("amazon-vpc-nat")) {
+      excludedDefaults.push("amazon-vpc-nat");
+    }
+  }
+
+  if (hardConstraints.requiresGovernance && profile.requiredUnpricedCapabilities.length === 0) {
+    fitGaps.push(
+      "The prompt implies a governed lake, but no explicit governance capability is modeled for the selected pattern.",
+    );
+  }
+
+  if (
+    hardConstraints.requiresStreamProcessing &&
+    !profile.patternTraits.includes("stream-processing")
+  ) {
+    fitGaps.push(
+      "The prompt implies real-time stream processing, but the selected pattern is lake-ingest oriented.",
+    );
+  }
+
+  return {
+    fitGaps,
+    excludedDefaults,
+  };
+}
+
+function minimumPrimaryDominanceRatioFor(profile) {
+  if (profile.patternTraits.includes("serverless") || profile.patternTraits.includes("private")) {
+    return 0.65;
+  }
+
+  if (profile.patternTraits.includes("fargate")) {
+    return 0.6;
+  }
+
+  if (profile.architectureFamily === "data-platform") {
+    return 0.62;
+  }
+
+  return 0.55;
+}
+
+function budgetFitForBlueprint(blueprint, targetMonthlyUsd) {
+  const guidance = blueprint.budgetGuidance ?? null;
+
+  if (!Number.isFinite(targetMonthlyUsd) || targetMonthlyUsd <= 0 || !guidance) {
+    return {
+      status: "underspecified",
+      details: "No target monthly budget was supplied for ranking.",
+      guidance,
+    };
+  }
+
+  if (guidance.minimumMonthlyUsd && targetMonthlyUsd < guidance.minimumMonthlyUsd) {
+    return {
+      status: "incompatible_budget",
+      details: `Target ${targetMonthlyUsd.toFixed(2)} USD is below the minimum viable range of ${guidance.minimumMonthlyUsd.toFixed(2)} USD.`,
+      guidance,
+    };
+  }
+
+  if (guidance.preferredMinMonthlyUsd && targetMonthlyUsd < guidance.preferredMinMonthlyUsd) {
+    return {
+      status: "nearest_fit_below",
+      details: `Target ${targetMonthlyUsd.toFixed(2)} USD is below the preferred operating range of ${guidance.preferredMinMonthlyUsd.toFixed(2)} USD.`,
+      guidance,
+    };
+  }
+
+  if (guidance.preferredMaxMonthlyUsd && targetMonthlyUsd > guidance.preferredMaxMonthlyUsd) {
+    return {
+      status: "nearest_fit_above",
+      details: `Target ${targetMonthlyUsd.toFixed(2)} USD is above the preferred operating range of ${guidance.preferredMaxMonthlyUsd.toFixed(2)} USD.`,
+      guidance,
+    };
+  }
+
+  return {
+    status: "fits",
+    details: `Target ${targetMonthlyUsd.toFixed(2)} USD falls inside the preferred operating range.`,
+    guidance,
+  };
+}
+
+function serviceSelectionSignals(serviceIds = []) {
+  const selected = new Set(serviceIds);
+
+  return {
+    has(serviceId) {
+      return selected.has(serviceId);
+    },
+    size: selected.size,
+  };
+}
+
+function scoreArchitectureCandidate({
+  blueprint,
+  signals,
+  targetMonthlyUsd,
+  serviceIds = [],
+}) {
+  const selectedServices = serviceSelectionSignals(serviceIds);
+  const matchedSignals = [];
+  const rationale = [];
+  let score = signals.hasBrief ? blueprintKeywordScore(signals.briefLower ?? "", blueprint) : 0;
+  const budgetFit = budgetFitForBlueprint(blueprint, targetMonthlyUsd);
+
+  for (const signal of blueprint.signalProfile?.boost ?? []) {
+    if (signals.matched.includes(signal)) {
+      matchedSignals.push(signal);
+      rationale.push(`Matched ${signal} workload signals.`);
+      score += 8;
+    }
+  }
+
+  for (const signal of blueprint.signalProfile?.penalize ?? []) {
+    if (signals.matched.includes(signal)) {
+      score -= 7;
+    }
+  }
+
+  const requiredSignals = blueprint.signalProfile?.requireAny ?? [];
+
+  if (requiredSignals.length > 0) {
+    const matchedRequiredSignals = requiredSignals.filter((signal) => signals.matched.includes(signal));
+
+    if (matchedRequiredSignals.length > 0) {
+      score += matchedRequiredSignals.length * 5;
+    } else if (signals.hasBrief) {
+      score -= 10;
+    }
+  }
+
+  if (signals.operatingSystemHint && blueprint.defaultOperatingSystem === signals.operatingSystemHint) {
+    score += 4;
+  } else if (
+    signals.operatingSystemHint === "windows" &&
+    blueprint.defaultOperatingSystem === "linux"
+  ) {
+    score -= 12;
+  }
+
+  for (const serviceId of blueprint.requiredServiceIds) {
+    if (selectedServices.has(serviceId)) {
+      score += 6;
+      rationale.push(`Explicitly requested ${serviceId}.`);
+    }
+  }
+
+  switch (budgetFit.status) {
+    case "fits":
+      score += 6;
+      break;
+    case "nearest_fit_below":
+    case "nearest_fit_above":
+      score -= 2;
+      break;
+    case "incompatible_budget":
+      score -= 10;
+      break;
+    default:
+      break;
+  }
+
+  return {
+    blueprintId: blueprint.id,
+    blueprintTitle: blueprint.title,
+    architectureFamily: blueprint.architectureFamily,
+    architectureSubtype: blueprint.architectureSubtype,
+    summary: blueprint.description,
+    requiredCapabilities: [...(blueprint.requiredCapabilities ?? [])],
+    requiredServiceIds: [...blueprint.requiredServiceIds],
+    optionalServiceIds: [...blueprint.optionalServiceIds],
+    packIds: [...(blueprint.packIds ?? [])],
+    fitScore: score,
+    matchedSignals: [...new Set(matchedSignals)],
+    budgetFit,
+    rationale: rationale.length > 0 ? rationale : ["No strong workload-specific signals were matched."],
+  };
+}
+
+function buildArchitectureCandidates({
+  blueprintId,
+  templateId,
+  brief,
+  targetMonthlyUsd,
+  operatingSystem,
+  serviceIds,
+  assumptions,
+}) {
+  if (blueprintId) {
+    const blueprint = getBlueprint(blueprintId);
+
+    assumptions.push(`Architecture '${blueprintId}' was supplied explicitly.`);
+
+    return [
+      {
+        ...scoreArchitectureCandidate({
+          blueprint,
+          signals: {
+            matched: deriveArchitectureSignals({ brief, operatingSystem, serviceIds }).matched,
+            operatingSystemHint: operatingSystemHintFromBrief(brief, operatingSystem),
+            hasBrief: normalizeBrief(brief).length > 0,
+            briefLower: normalizeBrief(brief).toLowerCase(),
+          },
+          targetMonthlyUsd,
+          serviceIds,
+        }),
+        explicit: true,
+      },
+    ];
+  }
+
+  if (templateId) {
+    const resolvedBlueprintId = resolveBlueprintIdForTemplate(templateId);
+    const blueprint = getBlueprint(resolvedBlueprintId);
+
+    assumptions.push(`Architecture '${resolvedBlueprintId}' was selected from template '${templateId}'.`);
+
+    return [
+      {
+        ...scoreArchitectureCandidate({
+          blueprint,
+          signals: {
+            matched: deriveArchitectureSignals({ brief, operatingSystem, serviceIds }).matched,
+            operatingSystemHint: operatingSystemHintFromBrief(brief, operatingSystem),
+            hasBrief: normalizeBrief(brief).length > 0,
+            briefLower: normalizeBrief(brief).toLowerCase(),
+          },
+          targetMonthlyUsd,
+          serviceIds,
+        }),
+        explicit: true,
+      },
+    ];
+  }
+
+  if (!normalizeBrief(brief)) {
+    assumptions.push("Architecture 'linux-web-stack' was selected as the default architecture.");
+
+    return [
+      scoreArchitectureCandidate({
+        blueprint: getBlueprint("linux-web-stack"),
+        signals: {
+          matched: [],
+          operatingSystemHint: operatingSystem,
+          hasBrief: false,
+          briefLower: "",
+        },
+        targetMonthlyUsd,
+        serviceIds,
+      }),
+    ];
+  }
+
+  const signalState = deriveArchitectureSignals({ brief, operatingSystem, serviceIds });
+  signalState.briefLower = normalizeBrief(brief).toLowerCase();
+
+  const ranked = candidateBlueprintIds()
+    .map((candidateId) =>
+      scoreArchitectureCandidate({
+        blueprint: getBlueprint(candidateId),
+        signals: signalState,
+        targetMonthlyUsd,
+        serviceIds,
+      }),
+    )
+    .sort((left, right) => right.fitScore - left.fitScore);
+
+  if (ranked[0]) {
+    assumptions.push(`Architecture '${ranked[0].blueprintId}' was inferred from the brief.`);
+  } else {
+    assumptions.push("Architecture 'linux-web-stack' was selected as the default architecture.");
+  }
+
+  return ranked.slice(0, 3);
+}
+
+function selectedArchitectureCandidate(candidates) {
+  return candidates[0] ?? null;
+}
+
+function alternativeArchitectureCandidates(candidates) {
+  return candidates.slice(1);
 }
 
 function blueprintKeywordScore(brief, blueprint) {
@@ -445,6 +1191,28 @@ function additionalServiceIdsFromBrief(brief) {
     .map((service) => service.id);
 }
 
+function selectedServiceMetadata(blueprint, serviceId, required, source) {
+  const roleMetadata = blueprint.serviceRoles?.[serviceId];
+
+  if (roleMetadata) {
+    return {
+      role: roleMetadata.role,
+      rationale: roleMetadata.rationale,
+      required: roleMetadata.required ?? required,
+    };
+  }
+
+  return {
+    role: required ? "required-capability" : source === "explicit" ? "requested-add-on" : "optional-add-on",
+    rationale: required
+      ? `${serviceId} is part of the required service mix for ${blueprint.title}.`
+      : source === "explicit"
+        ? `${serviceId} was requested explicitly for this architecture.`
+        : `${serviceId} augments the selected architecture as an optional service.`,
+    required,
+  };
+}
+
 function buildSelectedServices({
   blueprint,
   brief,
@@ -456,7 +1224,12 @@ function buildSelectedServices({
   const inferredServiceIds = new Set(additionalServiceIdsFromBrief(brief));
   const selections = [];
   const seen = new Set();
+  const forbiddenServiceIds = new Set(blueprint.forbiddenServiceIds ?? []);
   const pushService = (serviceId, selectionSource, required) => {
+    if (!required && selectionSource !== "explicit" && forbiddenServiceIds.has(serviceId)) {
+      return;
+    }
+
     if (seen.has(serviceId)) {
       return;
     }
@@ -464,12 +1237,15 @@ function buildSelectedServices({
     seen.add(serviceId);
     const definition = getServiceDefinition(serviceId);
     const capability = getServiceRegionCapability(serviceId, region);
+    const metadata = selectedServiceMetadata(blueprint, serviceId, required, selectionSource);
     selections.push({
       serviceId,
       serviceName: definition.name,
       category: definition.category,
       implementationStatus: definition.implementationStatus,
-      required,
+      required: metadata.required,
+      role: metadata.role,
+      rationale: metadata.rationale,
       source: selectionSource,
       capability,
     });
@@ -543,6 +1319,50 @@ function priceModeledService(serviceId, region, monthlyBudgetUsd) {
 function priceSelectedService({ service, region, monthlyBudgetUsd, notes }) {
   const definition = getServiceDefinition(service.serviceId);
 
+  if (service.serviceId === "amazon-vpc-nat" && !service.required) {
+    return {
+      serviceId: service.serviceId,
+      monthlyBudgetUsd,
+      exact: false,
+      breakdown: priceModeledService(service.serviceId, region, monthlyBudgetUsd),
+    };
+  }
+
+  if (service.serviceId === "amazon-rds-postgresql" && !service.required) {
+    const entry = buildBudgetDrivenPostgresEntry({
+      region,
+      monthlyBudgetUsd,
+      notes,
+      policy: normalizeScenarioPolicies()[0],
+    });
+
+    return {
+      serviceId: service.serviceId,
+      monthlyBudgetUsd,
+      exact: true,
+      entry,
+      breakdown: augmentCoreBreakdown(entry.breakdown, region),
+    };
+  }
+
+  if (service.serviceId === "amazon-ec2" && !service.required) {
+    const entry = buildBudgetDrivenEc2Entry({
+      region,
+      monthlyBudgetUsd,
+      notes,
+      operatingSystem: service.category === "compute" ? "linux" : "linux",
+      policy: normalizeScenarioPolicies()[0],
+    });
+
+    return {
+      serviceId: service.serviceId,
+      monthlyBudgetUsd,
+      exact: true,
+      entry,
+      breakdown: augmentCoreBreakdown(entry.breakdown, region),
+    };
+  }
+
   if (service.capability.support === "exact") {
     if (typeof definition.buildEntry !== "function") {
       throw new Error(`Exact service '${service.serviceId}' is missing a buildEntry implementation.`);
@@ -593,6 +1413,27 @@ function augmentCoreBreakdown(breakdown, region) {
   };
 }
 
+function annotateBreakdown(blueprint, breakdown) {
+  const metadata = selectedServiceMetadata(
+    blueprint,
+    breakdown.serviceId,
+    blueprint.requiredServiceIds.includes(breakdown.serviceId),
+    "breakdown",
+  );
+
+  return {
+    ...breakdown,
+    supportive: blueprint.requiredServiceIds.includes(breakdown.serviceId) ? false : breakdown.supportive,
+    role: metadata.role,
+    required: metadata.required,
+    rationale: metadata.rationale,
+  };
+}
+
+function annotateBreakdowns(blueprint, breakdowns) {
+  return breakdowns.map((breakdown) => annotateBreakdown(blueprint, breakdown));
+}
+
 function totalBreakdownMonthlyUsd(breakdowns) {
   return roundCurrency(breakdowns.reduce((sum, service) => sum + service.monthlyUsd, 0));
 }
@@ -602,8 +1443,26 @@ function totalEntryMonthlyUsd(entries) {
 }
 
 function normalizedBreakdown(entry) {
+  const kindMappings = {
+    eks: "amazon-eks",
+    ec2Linux: "amazon-ec2",
+    ec2Windows: "amazon-ec2",
+    rdsPostgres: "amazon-rds-postgresql",
+    vpcNat: "amazon-vpc-nat",
+  };
+  const serviceId = entry.breakdown.serviceId ?? kindMappings[entry.breakdown.kind] ?? null;
+  const region = entry.breakdown.region ?? null;
+  const definition = serviceId ? getServiceDefinition(serviceId) : null;
+
   return {
     ...entry.breakdown,
+    ...(serviceId
+      ? {
+          serviceId,
+          implementationStatus: definition.implementationStatus,
+          capability: region ? getServiceRegionCapability(serviceId, region) : null,
+        }
+      : {}),
     monthlyUsd: roundCurrency(entry.breakdown.monthlyUsd),
   };
 }
@@ -635,8 +1494,182 @@ function allocateBudgetByWeights(totalBudgetUsd, weightedServices) {
   });
 }
 
+function buildBudgetDrivenEc2Entry({ region, monthlyBudgetUsd, notes, operatingSystem, policy }) {
+  const ec2Service = getServiceDefinition("amazon-ec2");
+  const instanceType = operatingSystem === "windows" ? "m6i.xlarge" : "m6i.large";
+  const monthlyPerInstance = modelEc2MonthlyUsd(region, operatingSystem, instanceType, 1);
+  const instanceCount = Math.max(1, Math.round(monthlyBudgetUsd / monthlyPerInstance));
+
+  return ec2Service.buildEntry({
+    environment: "shared",
+    region,
+    operatingSystem,
+    instanceType,
+    instanceCount,
+    notes,
+    pricingStrategy: ec2PricingStrategyForPolicy(policy),
+  });
+}
+
+function buildBudgetDrivenPostgresEntry({ region, monthlyBudgetUsd, notes, policy }) {
+  const rdsService = getServiceDefinition("amazon-rds-postgresql");
+  const databasePricingModel = rdsPricingModelForPolicy(policy);
+  const budget = Math.max(Number(monthlyBudgetUsd) || 0, 0);
+  const storagePricing = pricingFor(region).rdsPostgres.storagePerGbMonth;
+  const pricingMultiplier = rdsPricingModelMultiplier(databasePricingModel);
+  const profile = SHARED_POSTGRES_BUDGET_PROFILES
+    .map((candidate) => {
+      const deploymentOption = deploymentOptionForPolicy(
+        policy,
+        "prod",
+        candidate.deploymentOption,
+      );
+      const baselineMonthlyUsd =
+        modelRdsMonthlyUsd(
+          region,
+          candidate.instanceType,
+          deploymentOption,
+          candidate.storageGb,
+        ) * pricingMultiplier;
+      const monthlyStorageRate =
+        (storagePricing[deploymentOption] ?? storagePricing["Single-AZ"] ?? 0) * pricingMultiplier;
+      const storageTopUpGb =
+        budget > baselineMonthlyUsd && monthlyStorageRate > 0
+          ? Math.min(
+              12_000,
+              Math.max(Math.round((budget - baselineMonthlyUsd) / monthlyStorageRate), 0),
+            )
+          : 0;
+      const storageGb = candidate.storageGb + storageTopUpGb;
+      const monthlyUsd =
+        modelRdsMonthlyUsd(region, candidate.instanceType, deploymentOption, storageGb) *
+        pricingMultiplier;
+
+      return {
+        instanceType: candidate.instanceType,
+        deploymentOption,
+        storageGb,
+        monthlyUsd: roundCurrency(monthlyUsd),
+      };
+    })
+    .sort(
+      (left, right) =>
+        Math.abs(left.monthlyUsd - budget) - Math.abs(right.monthlyUsd - budget),
+    )[0];
+
+  return rdsService.buildEntry({
+    environment: "shared",
+    region,
+    instanceType: profile.instanceType,
+    deploymentOption: deploymentOptionForPolicy(policy, "prod", profile.deploymentOption),
+    storageGb: storageGbForPolicy(profile.storageGb, policy),
+    notes,
+    pricingModel: databasePricingModel,
+  });
+}
+
+function buildWeightedServiceEntry({ serviceId, region, monthlyBudgetUsd, notes, operatingSystem, policy }) {
+  const definition = getServiceDefinition(serviceId);
+
+  if (serviceId === "amazon-ec2") {
+    return buildBudgetDrivenEc2Entry({
+      region,
+      monthlyBudgetUsd,
+      notes,
+      operatingSystem,
+      policy,
+    });
+  }
+
+  if (serviceId === "amazon-rds-postgresql") {
+    return buildBudgetDrivenPostgresEntry({
+      region,
+      monthlyBudgetUsd,
+      notes,
+      policy,
+    });
+  }
+
+  if (serviceId === "amazon-eks") {
+    return definition.buildEntry({
+      environment: "shared",
+      region,
+      notes,
+    });
+  }
+
+  if (typeof definition.buildEntry !== "function") {
+    throw new Error(`Exact core service '${serviceId}' is missing a buildEntry implementation.`);
+  }
+
+  return definition.buildEntry({
+    region,
+    monthlyBudgetUsd,
+    notes,
+  });
+}
+
+function buildWeightedServicesScenario({
+  profile,
+  region,
+  targetMonthlyUsd,
+  estimateName,
+  notes,
+  operatingSystem,
+  policy,
+}) {
+  const weightedCoreServices = profile.requiredServiceIds
+    .map((serviceId) => ({
+      serviceId,
+      weight: profile.coreBudgetWeights?.[serviceId] ?? 0,
+    }))
+    .filter((service) => service.weight > 0);
+
+  if (weightedCoreServices.length === 0) {
+    throw new Error(`Architecture pattern '${profile.patternId}' is missing weighted-service core weights.`);
+  }
+
+  const coreBudgets = allocateBudgetByWeights(targetMonthlyUsd, weightedCoreServices);
+  const entries = coreBudgets.map((budget) =>
+    buildWeightedServiceEntry({
+      serviceId: budget.serviceId,
+      region,
+      monthlyBudgetUsd: budget.monthlyBudgetUsd,
+      notes,
+      operatingSystem: operatingSystem ?? profile.defaultOperatingSystem ?? "linux",
+      policy,
+    }),
+  );
+  const breakdown = annotateBreakdowns(
+    profile,
+    entries.map((entry) =>
+      entry.breakdown.kind === "ec2Linux" ||
+      entry.breakdown.kind === "ec2Windows" ||
+      entry.breakdown.kind === "rdsPostgres" ||
+      entry.breakdown.kind === "vpcNat"
+        ? augmentCoreBreakdown(entry.breakdown, region)
+        : normalizedBreakdown(entry),
+    ),
+  );
+
+  return {
+    template: getTemplate(profile.templateId),
+    entries,
+    estimate: buildEstimatePayloadFromEntries({
+      estimateName,
+      entries,
+    }),
+    breakdown,
+    validation: {
+      passed: true,
+      hardFailures: [],
+      parityDetails: [],
+    },
+  };
+}
+
 function buildDataServicesScenario({
-  blueprint,
+  profile,
   template,
   region,
   targetMonthlyUsd,
@@ -666,11 +1699,11 @@ function buildDataServicesScenario({
     );
   }
 
-  const weightedCoreServices = blueprint.requiredServiceIds
+  const weightedCoreServices = profile.requiredServiceIds
     .filter((serviceId) => serviceId !== "amazon-vpc-nat")
     .map((serviceId) => ({
       serviceId,
-      weight: template.coreBudgetWeights?.[serviceId] ?? 0,
+      weight: profile.coreBudgetWeights?.[serviceId] ?? template.coreBudgetWeights?.[serviceId] ?? 0,
     }))
     .filter((service) => service.weight > 0);
 
@@ -726,7 +1759,7 @@ function buildDataServicesScenario({
     }),
   );
 
-  const breakdown = entries.map((entry) =>
+  const breakdown = annotateBreakdowns(profile, entries.map((entry) =>
     entry.breakdown.kind === "eks" ||
     entry.breakdown.kind === "ec2Linux" ||
     entry.breakdown.kind === "ec2Windows" ||
@@ -734,14 +1767,14 @@ function buildDataServicesScenario({
     entry.breakdown.kind === "vpcNat"
       ? augmentCoreBreakdown(entry.breakdown, region)
       : normalizedBreakdown(entry),
-  );
+  ));
   const estimate = buildEstimatePayloadFromEntries({
     estimateName,
     entries,
   });
   const validation = validateEstimatePayload({
     estimate,
-    templateId: blueprint.templateId,
+    templateId: profile.templateId,
     expectedMonthlyUsd: totalEntryMonthlyUsd(entries),
     expectedRegion: region,
   });
@@ -772,7 +1805,7 @@ function adjustedSharedServiceWeight(serviceId, weight, policy) {
 }
 
 function buildSharedServicesScenario({
-  blueprint,
+  profile,
   template,
   region,
   targetMonthlyUsd,
@@ -780,12 +1813,12 @@ function buildSharedServicesScenario({
   notes,
   policy,
 }) {
-  const weightedCoreServices = blueprint.requiredServiceIds
+  const weightedCoreServices = profile.requiredServiceIds
     .map((serviceId) => ({
       serviceId,
       weight: adjustedSharedServiceWeight(
         serviceId,
-        template.coreBudgetWeights?.[serviceId] ?? 0,
+        profile.coreBudgetWeights?.[serviceId] ?? template.coreBudgetWeights?.[serviceId] ?? 0,
         policy,
       ),
     }))
@@ -811,14 +1844,17 @@ function buildSharedServicesScenario({
       notes,
     });
   });
-  const breakdown = entries.map((entry) => normalizedBreakdown(entry));
+  const breakdown = annotateBreakdowns(
+    profile,
+    entries.map((entry) => normalizedBreakdown(entry)),
+  );
   const estimate = buildEstimatePayloadFromEntries({
     estimateName,
     entries,
   });
   const validation = validateEstimatePayload({
     estimate,
-    templateId: blueprint.templateId,
+    templateId: profile.templateId,
     expectedMonthlyUsd: totalEntryMonthlyUsd(entries),
     expectedRegion: region,
   });
@@ -833,7 +1869,7 @@ function buildSharedServicesScenario({
 }
 
 function buildCoreScenario({
-  blueprint,
+  profile,
   region,
   targetMonthlyUsd,
   environmentSplit,
@@ -842,11 +1878,23 @@ function buildCoreScenario({
   operatingSystem,
   policy,
 }) {
-  const template = getTemplate(blueprint.templateId);
+  const template = getTemplate(profile.templateId);
+
+  if (profile.coreStrategy === "weighted-services" || template.coreStrategy === "weighted-services") {
+    return buildWeightedServicesScenario({
+      profile,
+      region,
+      targetMonthlyUsd,
+      estimateName,
+      notes,
+      operatingSystem,
+      policy,
+    });
+  }
 
   if (template.coreStrategy === "data-services") {
     return buildDataServicesScenario({
-      blueprint,
+      profile,
       template,
       region,
       targetMonthlyUsd,
@@ -860,7 +1908,7 @@ function buildCoreScenario({
 
   if (template.coreStrategy === "shared-services") {
     return buildSharedServicesScenario({
-      blueprint,
+      profile,
       template,
       region,
       targetMonthlyUsd,
@@ -975,7 +2023,10 @@ function buildCoreScenario({
     }),
   );
 
-  const breakdown = entries.map((entry) => augmentCoreBreakdown(entry.breakdown, region));
+  const breakdown = annotateBreakdowns(
+    profile,
+    entries.map((entry) => augmentCoreBreakdown(entry.breakdown, region)),
+  );
 
   const estimate = buildEstimatePayloadFromEntries({
     estimateName,
@@ -983,7 +2034,7 @@ function buildCoreScenario({
   });
   const validation = validateEstimatePayload({
     estimate,
-    templateId: blueprint.templateId,
+    templateId: profile.templateId,
     expectedMonthlyUsd: targetMonthlyUsd,
     expectedRegion: region,
   });
@@ -997,16 +2048,15 @@ function buildCoreScenario({
   };
 }
 
-function normalizeAddOnBudgets(targetMonthlyUsd, selectedServices, blueprint, policy) {
-  const templateBlueprint = getBlueprint(resolveBlueprintIdForTemplate(blueprint.templateId));
-  const coreServiceIds = new Set(templateBlueprint.requiredServiceIds);
+function normalizeAddOnBudgets(targetMonthlyUsd, selectedServices, profile, policy) {
+  const coreServiceIds = new Set(profile.requiredServiceIds);
   const budgetedServices = selectedServices.filter(
     (service) => service.capability.support !== "unavailable" && !coreServiceIds.has(service.serviceId),
   );
   const requested = budgetedServices.map((service) => ({
     serviceId: service.serviceId,
     ratio:
-      (blueprint.addOnAllocations[service.serviceId] ?? 0.015) *
+      (profile.addOnAllocations[service.serviceId] ?? 0.015) *
       policy.sharedServicesMultiplier *
       (["edge", "networking"].includes(service.category) ? policy.dataTransferMultiplier : 1),
   }));
@@ -1029,6 +2079,43 @@ function scenarioDeltaDrivers(policy) {
     `${policy.storageStrategy} storage (${Math.round(policy.storageMultiplier * 100)}% storage multiplier)`,
     `${policy.sharedServicesProfile} shared services (${Math.round(policy.sharedServicesMultiplier * 100)}% overhead multiplier)`,
   ];
+}
+
+function parseMinimumBudgetUsd(errorMessage) {
+  const match = String(errorMessage ?? "").match(/Minimum modeled spend is ([0-9]+(?:\.[0-9]+)?) USD/i);
+
+  if (!match?.[1]) {
+    return null;
+  }
+
+  return roundCurrency(Number(match[1]));
+}
+
+function scenarioBudgetFit(targetMonthlyUsd, modeledMonthlyUsd) {
+  if (!Number.isFinite(targetMonthlyUsd) || targetMonthlyUsd <= 0) {
+    return {
+      status: "underspecified",
+      deltaUsd: 0,
+      details: "No target budget was supplied for scenario fit analysis.",
+    };
+  }
+
+  const deltaUsd = roundCurrency(modeledMonthlyUsd - targetMonthlyUsd);
+  const toleranceUsd = roundCurrency(targetMonthlyUsd * 0.05);
+
+  if (Math.abs(deltaUsd) <= toleranceUsd) {
+    return {
+      status: "fits",
+      deltaUsd,
+      details: `Modeled monthly total ${modeledMonthlyUsd.toFixed(2)} USD is within ${toleranceUsd.toFixed(2)} USD of the target.`,
+    };
+  }
+
+  return {
+    status: deltaUsd > 0 ? "nearest_fit_above" : "nearest_fit_below",
+    deltaUsd,
+    details: `Modeled monthly total ${modeledMonthlyUsd.toFixed(2)} USD differs from the target by ${Math.abs(deltaUsd).toFixed(2)} USD.`,
+  };
 }
 
 function comparisonSummaryFor(scenarios) {
@@ -1100,13 +2187,35 @@ export function designArchitecture({
   const hasBrief = normalizedBrief.length > 0;
   const normalizedOperatingSystem =
     operatingSystem && OPERATING_SYSTEMS.has(operatingSystem) ? operatingSystem : null;
-  const resolvedBlueprintId = inferBlueprintId({
-    templateId,
-    blueprintId,
+  const hardConstraints = extractHardConstraints({
     brief: normalizedBrief,
+    serviceIds: serviceIds ?? [],
     operatingSystem: normalizedOperatingSystem,
+  });
+  const architectureCandidates = buildArchitectureCandidates({
+    blueprintId,
+    templateId,
+    brief: normalizedBrief,
+    targetMonthlyUsd,
+    operatingSystem: normalizedOperatingSystem,
+    serviceIds,
     assumptions,
   });
+  const selectedCandidate =
+    selectedArchitectureCandidate(architectureCandidates) ??
+    scoreArchitectureCandidate({
+      blueprint: getBlueprint("linux-web-stack"),
+      signals: {
+        matched: [],
+        operatingSystemHint: normalizedOperatingSystem,
+        hasBrief,
+        briefLower: normalizedBrief.toLowerCase(),
+      },
+      targetMonthlyUsd,
+      serviceIds,
+    });
+  const alternativeCandidates = alternativeArchitectureCandidates(architectureCandidates);
+  const resolvedBlueprintId = selectedCandidate.blueprintId;
   const blueprint = getBlueprint(resolvedBlueprintId);
   const operatingSystemInference = inferOperatingSystem({
     brief: normalizedBrief,
@@ -1214,14 +2323,55 @@ export function designArchitecture({
 
   const resolvedClientName = clientName ?? inferClientNameFromBrief(brief, assumptions) ?? null;
   const resolvedEstimateName = estimateName ?? estimateNameFor(resolvedClientName, blueprint.title);
-  const selectedServices = buildSelectedServices({
+  const patternCandidates = buildPatternCandidates({
     blueprint,
+    brief: normalizedBrief,
+    targetMonthlyUsd: resolvedTargetMonthlyUsd,
+    serviceIds: serviceIds ?? [],
+    hardConstraints,
+  });
+  const selectedPatternCandidate = patternCandidates[0] ?? {
+    id: `${blueprint.id}.default`,
+    title: blueprint.title,
+    budgetFit: selectedCandidate.budgetFit,
+    fitScore: selectedCandidate.fitScore,
+    requiredUnpricedCapabilities: [],
+    traits: [],
+    rationale: ["Default architecture pattern selected."],
+  };
+  const alternativePatternCandidates = patternCandidates.slice(1);
+  const selectedPattern = materializePattern(blueprint, selectedPatternCandidate.id);
+  const architectureProfile = resolveArchitectureProfile(blueprint, selectedPattern);
+  const { fitGaps, excludedDefaults } = patternFitGaps(architectureProfile, hardConstraints);
+  const selectedServices = buildSelectedServices({
+    blueprint: architectureProfile,
     brief: normalizedBrief,
     serviceIds,
     region: resolvedRegion,
     includeDefaultAddOns,
   });
   const serviceCoverage = coverageFor(selectedServices);
+
+  if (selectedPatternCandidate.budgetFit.status !== "fits") {
+    warnings.push(selectedPatternCandidate.budgetFit.details);
+  }
+
+  if (
+    alternativeCandidates.length > 0 &&
+    selectedCandidate.fitScore - alternativeCandidates[0].fitScore <= 8
+  ) {
+    warnings.push(
+      `Architecture inference is close between ${selectedCandidate.blueprintId} and ${alternativeCandidates[0].blueprintId}.`,
+    );
+    unresolvedQuestions.push(
+      makeStructuredItem(
+        "question.architecture-shape",
+        "blueprintId",
+        `The brief could map to ${selectedCandidate.blueprintTitle} or ${alternativeCandidates[0].blueprintTitle}.`,
+        "Confirm which architecture shape is intended before final pricing if the distinction matters.",
+      ),
+    );
+  }
 
   if (serviceCoverage.unavailable.length > 0) {
     const message = `Selected services are not implemented in ${resolvedRegion}: ${serviceCoverage.unavailable.join(", ")}.`;
@@ -1248,6 +2398,19 @@ export function designArchitecture({
         `Do you need an official calculator link for all selected services, or is modeled coverage acceptable for ${serviceCoverage.modeled.join(", ")}?`,
         "Reduce the service set to exact services if the immediate deliverable must be a calculator link.",
       ),
+    );
+  }
+
+  if (fitGaps.length > 0) {
+    warnings.push(...fitGaps);
+  }
+
+  if (architectureProfile.requiredUnpricedCapabilities.length > 0) {
+    warnings.push(
+      ...architectureProfile.requiredUnpricedCapabilities.map((capability) => capability.details),
+    );
+    suggestedNextActions.push(
+      "Resolve or document the required-but-unpriced capability gaps before treating the response as a complete architecture.",
     );
   }
 
@@ -1294,6 +2457,12 @@ export function designArchitecture({
     );
   }
 
+  if (alternativeCandidates.length > 0) {
+    suggestedNextActions.push(
+      `Compare alternate architectures: ${alternativeCandidates.map((candidate) => candidate.blueprintId).join(", ")}.`,
+    );
+  }
+
   if (blockers.length === 0 && unresolvedQuestions.length === 0) {
     suggestedNextActions.push("Price the architecture and inspect baseline, optimized, and aggressive scenarios.");
   }
@@ -1302,8 +2471,15 @@ export function designArchitecture({
     blueprint: {
       value: blueprint.id,
       source:
-        blueprintId || templateId ? "explicit" : hasBrief ? "brief-inferred" : "default",
-      confidence: blueprintId || templateId ? 1 : hasBrief ? 0.8 : 0.65,
+        blueprintId || templateId
+          ? "explicit"
+          : selectedCandidate.fitScore > 15
+            ? "brief-inferred"
+            : "default",
+      confidence:
+        blueprintId || templateId
+          ? 1
+          : clampNumber((selectedCandidate.fitScore + 20) / 100, 0.4, 0.92),
     },
     region: {
       value: resolvedRegion,
@@ -1332,13 +2508,14 @@ export function designArchitecture({
     Math.round(
       inference.blueprint.confidence * 22 +
         inference.region.confidence * 18 +
-        inference.targetMonthlyUsd.confidence * 24 +
-        inference.operatingSystem.confidence * 12 +
-        inference.environmentSplit.confidence * 12 +
-        inference.databaseEngine.confidence * 8 +
-        14 -
-        warnings.length * 5 -
-        blockers.length * 15,
+      inference.targetMonthlyUsd.confidence * 24 +
+      inference.operatingSystem.confidence * 12 +
+      inference.environmentSplit.confidence * 12 +
+      inference.databaseEngine.confidence * 8 +
+      Math.min(selectedCandidate.fitScore, 25) +
+      14 -
+      warnings.length * 5 -
+      blockers.length * 15,
     ),
     0,
     100,
@@ -1353,10 +2530,28 @@ export function designArchitecture({
     briefSummary: briefPreview(brief),
     blueprintId: blueprint.id,
     blueprintTitle: blueprint.title,
-    templateId: blueprint.templateId,
+    templateId: architectureProfile.templateId,
+    environmentModel: architectureProfile.environmentModel,
+    architectureFamily: blueprint.architectureFamily,
+    architectureSubtype: blueprint.architectureSubtype,
+    patternId: architectureProfile.patternId,
+    patternTitle: architectureProfile.patternTitle,
+    patternDescription: architectureProfile.patternDescription,
+    recommendedPatternId: selectedPatternCandidate.id,
+    recommendedArchitectureId: selectedCandidate.blueprintId,
+    alternativeArchitectureIds: alternativeCandidates.map((candidate) => candidate.blueprintId),
+    candidateArchitectures: architectureCandidates.map((candidate) => ({
+      ...candidate,
+    })),
+    patternCandidates: patternCandidates.map((candidate) => ({
+      ...candidate,
+    })),
+    alternativePatternIds: alternativePatternCandidates.map((candidate) => candidate.id),
+    requiredCapabilities: [...(architectureProfile.requiredCapabilities ?? [])],
+    budgetFit: { ...selectedPatternCandidate.budgetFit },
     packIds: [...(blueprint.packIds ?? [])],
     packs: blueprint.packs.map((pack) => ({ ...pack })),
-    requiredServiceFamilies: [...(blueprint.requiredServiceFamilies ?? [])],
+    requiredServiceFamilies: [...(architectureProfile.requiredServiceFamilies ?? [])],
     clientName: resolvedClientName,
     estimateName: resolvedEstimateName,
     notes: notes ?? null,
@@ -1367,6 +2562,13 @@ export function designArchitecture({
     includeDefaultAddOns,
     selectedServices,
     serviceCoverage,
+    hardConstraints,
+    fitGaps,
+    excludedDefaults,
+    requiredUnpricedCapabilities: architectureProfile.requiredUnpricedCapabilities.map((capability) => ({
+      ...capability,
+    })),
+    minimumPrimaryDominanceRatio: minimumPrimaryDominanceRatioFor(architectureProfile),
     defaultScenarioPolicies: normalizeScenarioPolicies(scenarioPolicies),
     blockers,
     blockerDetails,
@@ -1398,6 +2600,11 @@ export function priceArchitecture(input = {}) {
   }
 
   const blueprint = getBlueprint(architecture.blueprintId);
+  const selectedPattern = materializePattern(
+    blueprint,
+    architecture.patternId ?? `${blueprint.id}.default`,
+  );
+  const architectureProfile = resolveArchitectureProfile(blueprint, selectedPattern);
   const policies = normalizeScenarioPolicies(
     input.scenarioPolicies ?? architecture.defaultScenarioPolicies,
   );
@@ -1406,7 +2613,7 @@ export function priceArchitecture(input = {}) {
     const addOnBudgets = normalizeAddOnBudgets(
       targetMonthlyUsd,
       architecture.selectedServices,
-      blueprint,
+      architectureProfile,
       policy,
     );
     const addOnResults = addOnBudgets.map((budget) => {
@@ -1436,6 +2643,8 @@ export function priceArchitecture(input = {}) {
       coverage.modeled.length === 0 &&
       coverage.unavailable.length === 0 &&
       exactPolicySupport &&
+      architecture.requiredUnpricedCapabilities.length === 0 &&
+      architecture.fitGaps.length === 0 &&
       coreBudget > 0;
     const calculatorBlockers = [];
 
@@ -1457,15 +2666,28 @@ export function priceArchitecture(input = {}) {
       );
     }
 
+    if (architecture.requiredUnpricedCapabilities.length > 0) {
+      calculatorBlockers.push(
+        `Required capability gaps remain: ${architecture.requiredUnpricedCapabilities
+          .map((capability) => capability.id)
+          .join(", ")}.`,
+      );
+    }
+
+    if (architecture.fitGaps.length > 0) {
+      calculatorBlockers.push(architecture.fitGaps.join(" "));
+    }
+
     let coreScenario = null;
     let coreBreakdown = [];
     let modeledMonthlyUsd = addOnTotal;
     let draftValidation = null;
+    let budgetFitOverride = null;
 
     if (coreBudget > 0) {
       try {
         coreScenario = buildCoreScenario({
-          blueprint,
+          profile: architectureProfile,
           region: architecture.region,
           targetMonthlyUsd: coreBudget,
           environmentSplit: architecture.environmentSplit,
@@ -1478,25 +2700,57 @@ export function priceArchitecture(input = {}) {
         modeledMonthlyUsd = roundCurrency(addOnTotal + totalBreakdownMonthlyUsd(coreBreakdown));
         draftValidation = coreScenario.validation;
       } catch (error) {
-        calculatorBlockers.push(error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        const minimumBudgetUsd = parseMinimumBudgetUsd(message);
+
+        if (minimumBudgetUsd && minimumBudgetUsd > coreBudget) {
+          coreScenario = buildCoreScenario({
+            profile: architectureProfile,
+            region: architecture.region,
+            targetMonthlyUsd: minimumBudgetUsd,
+            environmentSplit: architecture.environmentSplit,
+            estimateName: scenarioEstimateName(architecture.estimateName, policy),
+            notes: architecture.notes,
+            operatingSystem: architecture.operatingSystem,
+            policy,
+          });
+          coreBreakdown = coreScenario.breakdown;
+          modeledMonthlyUsd = roundCurrency(addOnTotal + totalBreakdownMonthlyUsd(coreBreakdown));
+          draftValidation = coreScenario.validation;
+          budgetFitOverride = {
+            status: "nearest_fit_above",
+            deltaUsd: roundCurrency(modeledMonthlyUsd - targetMonthlyUsd),
+            details: `Target ${targetMonthlyUsd.toFixed(2)} USD is below the minimum viable architecture shape. Sized the nearest valid scenario at ${modeledMonthlyUsd.toFixed(2)} USD.`,
+          };
+        } else {
+          calculatorBlockers.push(message);
+        }
       }
     } else {
       calculatorBlockers.push("Scenario leaves no remaining budget for the core services.");
     }
 
-    const serviceBreakdown = [...coreBreakdown, ...addOnServiceBreakdown];
+    const serviceBreakdown = annotateBreakdowns(architectureProfile, [
+      ...coreBreakdown,
+      ...addOnServiceBreakdown,
+    ]);
     const exactAddOns = addOnResults
       .filter((result) => result.exact)
       .map((result) => ({
         serviceId: result.serviceId,
         monthlyBudgetUsd: result.monthlyBudgetUsd,
       }));
+    const budgetFit = budgetFitOverride ?? scenarioBudgetFit(targetMonthlyUsd, modeledMonthlyUsd);
+    const linkReady = Boolean(
+      calculatorEligible && calculatorBlockers.length === 0 && coreScenario?.estimate,
+    );
     const linkPlan =
-      calculatorEligible && coreScenario?.estimate
+      linkReady
         ? {
             blueprintId: architecture.blueprintId,
+            patternId: architecture.patternId,
             scenarioId: policy.id,
-            templateId: blueprint.templateId,
+            templateId: architectureProfile.templateId,
             targetMonthlyUsd: modeledMonthlyUsd,
             coreTargetMonthlyUsd: coreBudget,
             region: architecture.region,
@@ -1518,9 +2772,10 @@ export function priceArchitecture(input = {}) {
         serviceBreakdown,
         coverage: {
           ...coverage,
-          calculatorEligible,
+          calculatorEligible: linkReady,
         },
         calculatorBlockers,
+        budgetFit,
       },
       draftValidation,
     });
@@ -1535,17 +2790,26 @@ export function priceArchitecture(input = {}) {
       strategySummary: policy.strategySummary,
       deltaDrivers: scenarioDeltaDrivers(policy),
       scenarioPolicy: { ...policy },
+      budgetFit,
       pricingConfidence:
         architecture.confidence.level === "low" ? "review-required" : "exact-or-modeled",
       serviceBreakdown,
       coverage: {
         ...coverage,
-        calculatorEligible,
+        calculatorEligible: linkReady,
       },
-      calculatorEligible,
+      calculatorEligible: linkReady,
       calculatorBlockers,
       linkPlan,
       validation,
+      dominantServices: serviceBreakdown
+        .slice()
+        .sort((left, right) => right.monthlyUsd - left.monthlyUsd)
+        .slice(0, 4)
+        .map((service) => ({
+          serviceId: service.serviceId,
+          monthlyUsd: service.monthlyUsd,
+        })),
     };
   });
 
@@ -1562,8 +2826,13 @@ export function priceArchitecture(input = {}) {
 
 export function buildExactEstimateFromLinkPlan(linkPlan) {
   const blueprint = getBlueprint(linkPlan.blueprintId);
-  const built = buildCoreScenario({
+  const selectedPattern = materializePattern(
     blueprint,
+    linkPlan.patternId ?? `${blueprint.id}.default`,
+  );
+  const architectureProfile = resolveArchitectureProfile(blueprint, selectedPattern);
+  const built = buildCoreScenario({
+    profile: architectureProfile,
     region: linkPlan.region,
     targetMonthlyUsd: linkPlan.coreTargetMonthlyUsd ?? linkPlan.targetMonthlyUsd,
     environmentSplit: linkPlan.environmentSplit,
@@ -1579,26 +2848,36 @@ export function buildExactEstimateFromLinkPlan(linkPlan) {
 
   const addOnEntries = (linkPlan.exactAddOns ?? []).map((addOn) => {
     const definition = getServiceDefinition(addOn.serviceId);
-
-    if (typeof definition.buildEntry !== "function") {
-      throw new Error(`Exact add-on '${addOn.serviceId}' is missing a buildEntry implementation.`);
-    }
-
-    return definition.buildEntry({
+    const priced = priceSelectedService({
+      service: {
+        serviceId: addOn.serviceId,
+        category: definition.category,
+        required: false,
+        capability: getServiceRegionCapability(addOn.serviceId, linkPlan.region),
+      },
       region: linkPlan.region,
       monthlyBudgetUsd: addOn.monthlyBudgetUsd,
       notes: linkPlan.notes,
     });
+
+    if (!priced.entry) {
+      throw new Error(`Exact add-on '${addOn.serviceId}' is missing a buildEntry implementation.`);
+    }
+
+    return priced.entry;
   });
   const entries = [...built.entries, ...addOnEntries];
   const estimate = buildEstimatePayloadFromEntries({
     estimateName: linkPlan.estimateName,
     entries,
   });
-  const breakdown = [...built.breakdown, ...addOnEntries.map((entry) => entry.breakdown)];
+  const breakdown = annotateBreakdowns(
+    architectureProfile,
+    [...built.breakdown, ...addOnEntries.map((entry) => normalizedBreakdown(entry))],
+  );
   const validation = validateEstimatePayload({
     estimate,
-    templateId: blueprint.templateId,
+    templateId: architectureProfile.templateId,
     expectedMonthlyUsd: linkPlan.targetMonthlyUsd,
     expectedRegion: linkPlan.region,
   });

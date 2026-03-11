@@ -13,6 +13,98 @@ const FSX_SINGLE_AZ = "singleAZDeployment";
 const FSX_MULTI_AZ = "multiAZDeployment";
 const FSX_STORAGE_TYPE_SINGLE_AZ_SSD = "DDURBPI4tsBCssHtJz-pnpofARkXwk3q7_-D3R-POb0";
 const FSX_STORAGE_TYPE_MULTI_AZ_SSD = "tQmrtIAgZ-JGQyf4yDArf4sQPj9KzoFfpdCxfGf-tsM";
+const FSX_SHAPE_PROFILES = [
+  {
+    estimateFor: FSX_SINGLE_AZ,
+    storageType: FSX_STORAGE_TYPE_SINGLE_AZ_SSD,
+    storageCapacityGb: 500,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 32,
+    backupStorageGb: 50,
+  },
+  {
+    estimateFor: FSX_SINGLE_AZ,
+    storageType: FSX_STORAGE_TYPE_SINGLE_AZ_SSD,
+    storageCapacityGb: 1000,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 64,
+    backupStorageGb: 100,
+  },
+  {
+    estimateFor: FSX_SINGLE_AZ,
+    storageType: FSX_STORAGE_TYPE_SINGLE_AZ_SSD,
+    storageCapacityGb: 2000,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 64,
+    backupStorageGb: 200,
+  },
+  {
+    estimateFor: FSX_SINGLE_AZ,
+    storageType: FSX_STORAGE_TYPE_SINGLE_AZ_SSD,
+    storageCapacityGb: 3000,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 128,
+    backupStorageGb: 300,
+  },
+  {
+    estimateFor: FSX_SINGLE_AZ,
+    storageType: FSX_STORAGE_TYPE_SINGLE_AZ_SSD,
+    storageCapacityGb: 4000,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 128,
+    backupStorageGb: 400,
+  },
+  {
+    estimateFor: FSX_MULTI_AZ,
+    storageType: FSX_STORAGE_TYPE_MULTI_AZ_SSD,
+    storageCapacityGb: 2000,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 128,
+    backupStorageGb: 200,
+  },
+  {
+    estimateFor: FSX_MULTI_AZ,
+    storageType: FSX_STORAGE_TYPE_MULTI_AZ_SSD,
+    storageCapacityGb: 4000,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 256,
+    backupStorageGb: 400,
+  },
+  {
+    estimateFor: FSX_MULTI_AZ,
+    storageType: FSX_STORAGE_TYPE_MULTI_AZ_SSD,
+    storageCapacityGb: 6000,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 256,
+    backupStorageGb: 600,
+  },
+  {
+    estimateFor: FSX_MULTI_AZ,
+    storageType: FSX_STORAGE_TYPE_MULTI_AZ_SSD,
+    storageCapacityGb: 8000,
+    deduplicationSavingsPct: 50,
+    provisionedIopsMode: "AutomaticIOPS",
+    userProvisionedIops: 0,
+    throughputMbps: 512,
+    backupStorageGb: 800,
+  },
+];
 const FSX_PRICING = {
   "us-east-1": {
     [FSX_SINGLE_AZ]: {
@@ -135,38 +227,7 @@ function fsxMonthlyUsd({
 
 function fsxShapeForBudget(region, monthlyBudgetUsd) {
   const budget = Math.max(parseNumericValue(monthlyBudgetUsd, 0), 0);
-  const profiles = [
-    {
-      estimateFor: FSX_SINGLE_AZ,
-      storageType: FSX_STORAGE_TYPE_SINGLE_AZ_SSD,
-      storageCapacityGb: 500,
-      deduplicationSavingsPct: 50,
-      provisionedIopsMode: "AutomaticIOPS",
-      userProvisionedIops: 0,
-      throughputMbps: 32,
-      backupStorageGb: 50,
-    },
-    {
-      estimateFor: FSX_SINGLE_AZ,
-      storageType: FSX_STORAGE_TYPE_SINGLE_AZ_SSD,
-      storageCapacityGb: 1000,
-      deduplicationSavingsPct: 50,
-      provisionedIopsMode: "AutomaticIOPS",
-      userProvisionedIops: 0,
-      throughputMbps: 64,
-      backupStorageGb: 100,
-    },
-    {
-      estimateFor: FSX_MULTI_AZ,
-      storageType: FSX_STORAGE_TYPE_MULTI_AZ_SSD,
-      storageCapacityGb: 2000,
-      deduplicationSavingsPct: 50,
-      provisionedIopsMode: "AutomaticIOPS",
-      userProvisionedIops: 0,
-      throughputMbps: 128,
-      backupStorageGb: 200,
-    },
-  ].map((profile) => ({
+  const profiles = FSX_SHAPE_PROFILES.map((profile) => ({
     ...profile,
     monthlyUsd: fsxMonthlyUsd({
       region,

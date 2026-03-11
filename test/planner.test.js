@@ -18,10 +18,11 @@ const BLUEPRINT_TARGETS = {
   "windows-app-stack": 6000,
   "edge-api-platform": 9000,
   "event-driven-platform": 8000,
-  "data-platform-lite": 7500,
+  "lake-foundation": 12000,
+  "lakehouse-platform": 25000,
+  "streaming-data-platform": 22000,
+  "warehouse-centric-analytics": 18000,
   "modernization-platform": 12000,
-  "enterprise-data-lake": 25000,
-  "enterprise-data-platform": 15000,
 };
 
 test("designArchitecture keeps every shipped blueprint exact across the roadmap regions", () => {
@@ -63,7 +64,8 @@ test("buildCalculatorEstimateFromScenario builds exact baseline estimates outsid
       ],
     },
     {
-      blueprintId: "modernization-platform",
+      brief:
+        "Need a 12k monthly modernization program in eu-west-1 moving to Fargate with EFS, EBS, Redis, and PrivateLink.",
       region: "eu-west-1",
       targetMonthlyUsd: 12000,
       requiredCodes: [
@@ -73,15 +75,9 @@ test("buildCalculatorEstimateFromScenario builds exact baseline estimates outsid
         "amazonElasticBlockStore",
         "awsPrivateLinkVpc",
       ],
-      serviceIds: [
-        "amazon-efs",
-        "amazon-ebs",
-        "amazon-vpc-endpoints",
-        "amazon-elasticache-redis",
-      ],
     },
     {
-      blueprintId: "enterprise-data-lake",
+      blueprintId: "lakehouse-platform",
       region: "eu-west-1",
       targetMonthlyUsd: 25000,
       requiredCodes: [
@@ -94,28 +90,20 @@ test("buildCalculatorEstimateFromScenario builds exact baseline estimates outsid
       serviceIds: ["amazon-kinesis-firehose"],
     },
     {
-      blueprintId: "enterprise-data-platform",
+      blueprintId: "streaming-data-platform",
       region: "ca-central-1",
-      targetMonthlyUsd: 15000,
+      targetMonthlyUsd: 22000,
       requiredCodes: [
         "amazonS3",
-        "amazonRDSAuroraPostgreSQLCompatibleDB",
-        "amazonAuroraMySQLCompatible",
-        "amazonRDSMySQLDB",
-        "amazonRDSForSQLServer",
-        "amazonElastiCache",
-        "amazonElasticsearchService",
-        "amazonEFS",
+        "amazonKinesisFirehose",
+        "amazonAthena",
+        "awsEtlJobsAndDevelopmentEndpoints",
+        "awsGlueDataCatalogStorageRequests",
         "awsPrivateLinkVpc",
       ],
       serviceIds: [
-        "amazon-aurora-mysql",
-        "amazon-rds-mysql",
-        "amazon-rds-sqlserver",
-        "amazon-elasticache-redis",
-        "amazon-opensearch",
-        "amazon-efs",
         "amazon-vpc-endpoints",
+        "aws-glue-crawlers",
       ],
     },
   ];
@@ -167,10 +155,7 @@ test("buildCalculatorEstimateFromScenario builds exact baseline estimates outsid
 
 test("buildCalculatorEstimateFromScenario includes promoted windows add-ons in the saved estimate shape", () => {
   const priced = priceArchitecture({
-    blueprintId: "windows-app-stack",
-    region: "us-east-1",
-    targetMonthlyUsd: 6000,
-    serviceIds: ["amazon-fsx-windows", "amazon-rds-sqlserver", "aws-waf-v2"],
+    brief: "Need a 6k monthly Windows application in us-east-1 with FSx, SQL Server, and WAF.",
   });
   const baseline = getScenario(priced);
   const built = buildCalculatorEstimateFromScenario({

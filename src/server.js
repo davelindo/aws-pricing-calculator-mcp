@@ -55,7 +55,18 @@ const blueprintSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string(),
+  architectureFamily: z.string(),
+  architectureSubtype: z.string(),
+  environmentModel: z.string(),
   defaultOperatingSystem: z.string(),
+  requiredCapabilities: z.array(z.string()),
+  budgetGuidance: z
+    .object({
+      minimumMonthlyUsd: z.number(),
+      preferredMinMonthlyUsd: z.number(),
+      preferredMaxMonthlyUsd: z.number(),
+    })
+    .nullable(),
   packIds: z.array(z.string()),
   packs: z.array(
     z.object({
@@ -76,6 +87,41 @@ const structuredItemSchema = z.object({
   message: z.string(),
   remediation: z.string(),
   blocking: z.boolean(),
+});
+const budgetFitSchema = z.object({
+  status: z.enum([
+    "fits",
+    "underspecified",
+    "nearest_fit_above",
+    "nearest_fit_below",
+    "incompatible_budget",
+  ]),
+  details: z.string(),
+  deltaUsd: z.number().optional(),
+  guidance: z
+    .object({
+      minimumMonthlyUsd: z.number().optional(),
+      preferredMinMonthlyUsd: z.number().optional(),
+      preferredMaxMonthlyUsd: z.number().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+const architectureCandidateSchema = z.object({
+  blueprintId: z.string(),
+  blueprintTitle: z.string(),
+  architectureFamily: z.string(),
+  architectureSubtype: z.string(),
+  summary: z.string(),
+  requiredCapabilities: z.array(z.string()),
+  requiredServiceIds: z.array(z.string()),
+  optionalServiceIds: z.array(z.string()),
+  packIds: z.array(z.string()),
+  fitScore: z.number(),
+  matchedSignals: z.array(z.string()),
+  budgetFit: budgetFitSchema,
+  rationale: z.array(z.string()),
+  explicit: z.boolean().optional(),
 });
 const inferenceFieldSchema = z.object({
   value: z.any(),
@@ -112,6 +158,8 @@ const selectedServiceSchema = z.object({
   category: z.string(),
   implementationStatus: z.enum(["implemented", "modeled", "planned"]),
   required: z.boolean(),
+  role: z.string(),
+  rationale: z.string(),
   source: z.string(),
   capability: capabilityEntrySchema,
 });
@@ -188,6 +236,13 @@ const architectureSchema = z.object({
   blueprintId: z.string(),
   blueprintTitle: z.string(),
   templateId: z.string(),
+  architectureFamily: z.string(),
+  architectureSubtype: z.string(),
+  recommendedArchitectureId: z.string(),
+  alternativeArchitectureIds: z.array(z.string()),
+  candidateArchitectures: z.array(architectureCandidateSchema),
+  requiredCapabilities: z.array(z.string()),
+  budgetFit: budgetFitSchema,
   packIds: z.array(z.string()),
   packs: z.array(
     z.object({
@@ -237,6 +292,9 @@ const serviceBreakdownSchema = z.object({
   environment: z.string(),
   monthlyUsd: z.number(),
   implementationStatus: z.string(),
+  role: z.string(),
+  required: z.boolean(),
+  rationale: z.string(),
   capability: capabilityEntrySchema,
   details: z.string().nullable(),
 });
@@ -271,6 +329,7 @@ const pricedScenarioSchema = z.object({
   strategySummary: z.string(),
   deltaDrivers: z.array(z.string()),
   scenarioPolicy: scenarioPolicySchema,
+  budgetFit: budgetFitSchema,
   pricingConfidence: z.string(),
   serviceBreakdown: z.array(serviceBreakdownSchema),
   coverage: serviceCoverageSchema.extend({
@@ -345,6 +404,7 @@ function renderChecks(checks) {
 function renderArchitecture(architecture) {
   return [
     architecture.blueprintTitle,
+    `Architecture family: ${architecture.architectureFamily}/${architecture.architectureSubtype}`,
     `Ready to price: ${architecture.readyToPrice ? "yes" : "no"}`,
     `Confidence: ${architecture.confidence.level} (${architecture.confidence.score}/100)`,
     `Region: ${architecture.region}`,
@@ -353,13 +413,17 @@ function renderArchitecture(architecture) {
         ? "not resolved"
         : `${architecture.targetMonthlyUsd.toFixed(2)} USD`
     }`,
+    `Budget fit: ${architecture.budgetFit.status}`,
     `Packs: ${architecture.packIds.join(", ") || "none"}`,
+    architecture.alternativeArchitectureIds.length > 0
+      ? `Alternates: ${architecture.alternativeArchitectureIds.join(", ")}`
+      : "Alternates: none",
     "",
     "Selected services:",
     architecture.selectedServices
       .map(
         (service) =>
-          `- ${service.serviceName} (${service.capability.support}, ${service.capability.region})`,
+          `- ${service.serviceName} [${service.role}] (${service.capability.support}, ${service.capability.region})`,
       )
       .join("\n"),
     architecture.unresolvedQuestions.length > 0
@@ -378,6 +442,7 @@ function renderPricedArchitecture(result) {
     ...result.scenarios.map((scenario) =>
       [
         `${scenario.title}: ${scenario.modeledMonthlyUsd.toFixed(2)} USD/month`,
+        `Budget fit: ${scenario.budgetFit.status}`,
         `Policy: ${scenario.scenarioPolicy.computeCommitment}, ${scenario.scenarioPolicy.haPosture}, ${scenario.scenarioPolicy.environmentSizing}`,
         `Drivers: ${scenario.deltaDrivers.join("; ")}`,
         `Calculator eligible: ${scenario.calculatorEligible ? "yes" : "no"}`,
