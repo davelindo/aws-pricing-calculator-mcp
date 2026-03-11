@@ -1,0 +1,303 @@
+{
+  "contractVersion": "v1",
+  "tools": [
+    {
+      "name": "list_blueprints",
+      "description": "List the blueprint catalog supported by the architecture engine.",
+      "inputSchemaId": null,
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.list_blueprints.output"
+    },
+    {
+      "name": "list_service_catalog",
+      "description": "List the service registry with per-region capability states and implementation status.",
+      "inputSchemaId": null,
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.list_service_catalog.output"
+    },
+    {
+      "name": "design_architecture",
+      "description": "Normalize a blueprint or rough brief into an architecture spec with explicit service capabilities and default scenario policies.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.design_architecture.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.design_architecture.output"
+    },
+    {
+      "name": "price_architecture",
+      "description": "Price one or more scenario policies for an architecture and report exact, modeled, and unavailable service coverage.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.price_architecture.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.price_architecture.output"
+    },
+    {
+      "name": "create_calculator_link",
+      "description": "Create an official AWS calculator share link from an exact priced scenario and validate the saved estimate.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.create_calculator_link.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.create_calculator_link.output"
+    },
+    {
+      "name": "validate_calculator_link",
+      "description": "Validate an AWS calculator share link for pricing integrity, architecture completeness, and funding readiness.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.validate_calculator_link.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.validate_calculator_link.output"
+    }
+  ],
+  "enums": {
+    "blueprintIds": [
+      "container-platform",
+      "linux-web-stack",
+      "windows-app-stack",
+      "edge-api-platform",
+      "event-driven-platform",
+      "data-platform-lite",
+      "modernization-platform",
+      "enterprise-data-platform",
+      "enterprise-data-lake",
+      "lake-foundation",
+      "lakehouse-platform",
+      "streaming-data-platform",
+      "warehouse-centric-analytics"
+    ],
+    "patternIds": [
+      "eks-app-platform",
+      "eks-api-front-door",
+      "eks-private-service",
+      "eks-search-content-platform",
+      "container-platform.default",
+      "ec2-web-with-postgres",
+      "ec2-web-with-cdn",
+      "ec2-web-with-private-service",
+      "linux-web-stack.default",
+      "windows-iis-with-postgres",
+      "windows-iis-with-sqlserver",
+      "windows-files-app",
+      "windows-private-sql-service",
+      "windows-app-stack.default",
+      "serverless-edge-api",
+      "cloudfront-alb-origin-app",
+      "private-api-front-door",
+      "edge-api-platform.default",
+      "async-worker-platform",
+      "pubsub-fanout-platform",
+      "event-bus-integration-platform",
+      "event-driven-platform.default",
+      "data-platform-lite.default",
+      "hybrid-transition-state",
+      "ecs-fargate-target-state",
+      "modernization-platform.default",
+      "enterprise-data-platform.default",
+      "enterprise-data-lake.default",
+      "lake-foundation-basic",
+      "lake-foundation-governed",
+      "lake-foundation.default",
+      "lakehouse-serving",
+      "lakehouse-platform.default",
+      "stream-analytics-platform",
+      "streaming-data-platform.default",
+      "redshift-bi-warehouse",
+      "warehouse-centric-analytics.default"
+    ],
+    "templateIds": [
+      "eks-rds-standard",
+      "linux-heavy",
+      "windows-heavy",
+      "edge-api-serverless-standard",
+      "edge-origin-platform-standard",
+      "private-api-front-door-standard",
+      "event-driven-standard",
+      "modernization-fargate-standard",
+      "windows-sqlserver-standard",
+      "windows-files-standard",
+      "container-api-front-door-standard",
+      "container-private-service-standard",
+      "container-search-content-standard",
+      "linux-web-cdn-standard",
+      "linux-web-private-standard",
+      "lake-foundation-standard",
+      "lakehouse-platform-standard",
+      "streaming-data-platform-standard",
+      "warehouse-centric-analytics-standard",
+      "enterprise-data-lake-standard",
+      "data-platform-standard",
+      "enterprise-data-standard"
+    ],
+    "serviceIds": [
+      "amazon-eks",
+      "amazon-ec2",
+      "amazon-athena",
+      "amazon-redshift",
+      "aws-glue-etl",
+      "aws-glue-data-catalog",
+      "aws-glue-crawlers",
+      "amazon-kinesis-firehose",
+      "amazon-rds-postgresql",
+      "amazon-rds-mysql",
+      "amazon-rds-sqlserver",
+      "amazon-aurora-postgresql",
+      "amazon-aurora-mysql",
+      "amazon-elasticache-redis",
+      "amazon-vpc-nat",
+      "application-load-balancer",
+      "network-load-balancer",
+      "amazon-s3",
+      "amazon-efs",
+      "amazon-ebs",
+      "amazon-ecs-ec2",
+      "amazon-cloudfront",
+      "amazon-lambda",
+      "amazon-dynamodb",
+      "amazon-api-gateway-http",
+      "amazon-route53",
+      "amazon-sqs",
+      "amazon-sns",
+      "amazon-cloudwatch",
+      "amazon-eventbridge",
+      "aws-waf-v2",
+      "amazon-fsx-windows",
+      "amazon-opensearch",
+      "amazon-vpc-endpoints",
+      "amazon-ecs-fargate"
+    ],
+    "support": [
+      "exact",
+      "modeled",
+      "unavailable"
+    ],
+    "implementationStatus": [
+      "implemented",
+      "modeled",
+      "planned"
+    ],
+    "budgetFitStatus": [
+      "fits",
+      "underspecified",
+      "nearest_fit_above",
+      "nearest_fit_below",
+      "incompatible_budget"
+    ],
+    "sourceType": [
+      "brief",
+      "hybrid",
+      "blueprint"
+    ],
+    "operatingSystem": [
+      "linux",
+      "windows"
+    ],
+    "validationStatus": [
+      "pass",
+      "warning",
+      "fail"
+    ],
+    "validationSeverity": [
+      "info",
+      "warning",
+      "error"
+    ],
+    "validationPackIds": [
+      "pricing-integrity",
+      "architecture-completeness",
+      "funding-readiness",
+      "platform-governance"
+    ],
+    "validationRuleIds": [
+      "pricing.services-present",
+      "pricing.known-service-formulas",
+      "pricing.saved-modeled-parity",
+      "pricing.total-parity",
+      "pricing.group-subtotal-parity",
+      "pricing.scenario-target-positive",
+      "pricing.scenario-services-present",
+      "pricing.region-service-coverage",
+      "pricing.core-preview-valid",
+      "architecture.single-region",
+      "architecture.expected-region",
+      "architecture.required-service-codes",
+      "architecture.required-service-families",
+      "architecture.environment-coverage",
+      "architecture.compute-os",
+      "architecture.required-blueprint-services",
+      "architecture.required-capabilities",
+      "architecture.forbidden-service-mix",
+      "architecture.pattern-fit-gaps",
+      "architecture.required-unpriced-capabilities",
+      "architecture.environment-model",
+      "architecture.calculator-backed-services",
+      "funding.supportive-spend-threshold",
+      "funding.primary-spend-dominant",
+      "funding.primary-architecture-dominance",
+      "funding.target-band-fit",
+      "funding.architecture-budget-fit",
+      "funding.modeled-service-gaps",
+      "funding.calculator-link-ready",
+      "governance.non-default-region-justification",
+      "governance.edge-security-controls",
+      "governance.operational-visibility",
+      "governance.premium-managed-service-justification"
+    ],
+    "toolErrorCodes": [
+      "invalid_input",
+      "not_found",
+      "not_calculator_eligible",
+      "unsupported_region",
+      "unsupported_service_combination",
+      "validation_failed",
+      "upstream_aws_error",
+      "internal_error"
+    ],
+    "pricingConfidence": [
+      "exact-or-modeled",
+      "review-required"
+    ],
+    "selectedServiceSource": [
+      "blueprint-required",
+      "blueprint-default",
+      "explicit",
+      "brief-inferred"
+    ],
+    "inferenceSource": [
+      "explicit",
+      "brief-inferred",
+      "blueprint-default",
+      "default",
+      "missing"
+    ],
+    "computeCommitment": [
+      "on-demand",
+      "savings-plans",
+      "reserved",
+      "reserved-heavy"
+    ],
+    "databaseCommitment": [
+      "on-demand",
+      "reserved",
+      "reserved-heavy"
+    ],
+    "haPosture": [
+      "standard",
+      "targeted-ha",
+      "selective-ha"
+    ],
+    "storageStrategy": [
+      "standard",
+      "tuned",
+      "lean"
+    ],
+    "environmentSizing": [
+      "full-footprint",
+      "right-sized-non-prod",
+      "lean-non-prod"
+    ],
+    "sharedServicesProfile": [
+      "standard",
+      "trimmed",
+      "lean"
+    ],
+    "dataTransferProfile": [
+      "baseline",
+      "reviewed",
+      "minimized"
+    ],
+    "justificationProfile": [
+      "default-baseline",
+      "cost-optimized",
+      "high-optimization"
+    ]
+  }
+}

@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import * as z from "zod/v4";
 
 import {
   DEFAULT_BUDGET_TOLERANCE_PCT,
@@ -8,7 +7,6 @@ import {
   getServiceRegionCapability,
   listBlueprintCatalog,
   listServiceCatalog,
-  supportedBlueprintIds,
 } from "./catalog.js";
 import {
   fetchSavedEstimate,
@@ -20,426 +18,128 @@ import {
   designArchitecture,
   priceArchitecture,
 } from "./planner.js";
+import {
+  TOOL_CONTRACTS,
+  normalizeToolError,
+  normalizeToolOutput,
+} from "./contract/v1.js";
 import { validateEstimatePayload } from "./validation.js";
 
-const blueprintIdEnum = z.enum(supportedBlueprintIds());
-const environmentSplitSchema = z.object({
-  dev: z.number().nonnegative().optional(),
-  staging: z.number().nonnegative().optional(),
-  prod: z.number().nonnegative().optional(),
-});
-const normalizedEnvironmentSplitSchema = z.object({
-  dev: z.number(),
-  staging: z.number(),
-  prod: z.number(),
-});
-const capabilityEntrySchema = z.object({
-  region: z.string(),
-  support: z.enum(["exact", "modeled", "unavailable"]),
-  calculatorSaveSupported: z.boolean(),
-  validationSupported: z.boolean(),
-  reason: z.string(),
-});
-const serviceCatalogEntrySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  category: z.string(),
-  implementationStatus: z.enum(["implemented", "modeled", "planned"]),
-  keywords: z.array(z.string()),
-  pricingStrategies: z.array(z.string()),
-  calculatorServiceCodes: z.array(z.string()),
-  capabilityMatrix: z.array(capabilityEntrySchema),
-  supportedRegions: z.array(z.string()),
-});
-const blueprintSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string(),
-  architectureFamily: z.string(),
-  architectureSubtype: z.string(),
-  environmentModel: z.string(),
-  defaultOperatingSystem: z.string(),
-  requiredCapabilities: z.array(z.string()),
-  budgetGuidance: z
-    .object({
-      minimumMonthlyUsd: z.number(),
-      preferredMinMonthlyUsd: z.number(),
-      preferredMaxMonthlyUsd: z.number(),
-    })
-    .nullable(),
-  packIds: z.array(z.string()),
-  packs: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string(),
-      description: z.string(),
-    }),
-  ),
-  requiredServiceFamilies: z.array(z.string()),
-  requiredServiceIds: z.array(z.string()),
-  defaultAddOnServiceIds: z.array(z.string()),
-  optionalServiceIds: z.array(z.string()),
-  supportedRegions: z.array(z.string()),
-});
-const structuredItemSchema = z.object({
-  id: z.string(),
-  field: z.string(),
-  message: z.string(),
-  remediation: z.string(),
-  blocking: z.boolean(),
-});
-const budgetFitSchema = z.object({
-  status: z.enum([
-    "fits",
-    "underspecified",
-    "nearest_fit_above",
-    "nearest_fit_below",
-    "incompatible_budget",
-  ]),
-  details: z.string(),
-  deltaUsd: z.number().optional(),
-  guidance: z
-    .object({
-      minimumMonthlyUsd: z.number().optional(),
-      preferredMinMonthlyUsd: z.number().optional(),
-      preferredMaxMonthlyUsd: z.number().optional(),
-    })
-    .nullable()
-    .optional(),
-});
-const architectureCandidateSchema = z.object({
-  blueprintId: z.string(),
-  blueprintTitle: z.string(),
-  architectureFamily: z.string(),
-  architectureSubtype: z.string(),
-  summary: z.string(),
-  requiredCapabilities: z.array(z.string()),
-  requiredServiceIds: z.array(z.string()),
-  optionalServiceIds: z.array(z.string()),
-  packIds: z.array(z.string()),
-  fitScore: z.number(),
-  matchedSignals: z.array(z.string()),
-  budgetFit: budgetFitSchema,
-  rationale: z.array(z.string()),
-  explicit: z.boolean().optional(),
-});
-const patternCandidateSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string(),
-  fitScore: z.number(),
-  budgetFit: budgetFitSchema,
-  requiredServiceIds: z.array(z.string()),
-  primaryServiceIds: z.array(z.string()),
-  forbiddenServiceIds: z.array(z.string()),
-  requiredUnpricedCapabilities: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string(),
-      details: z.string(),
-    }),
-  ),
-  traits: z.array(z.string()),
-  rationale: z.array(z.string()),
-});
-const inferenceFieldSchema = z.object({
-  value: z.any(),
-  source: z.string(),
-  confidence: z.number(),
-});
-const hardConstraintSchema = z.object({
-  requestedDatabase: z.string().nullable(),
-  requiresServerless: z.boolean(),
-  requiresPrivateConnectivity: z.boolean(),
-  requiresFargatePrimary: z.boolean(),
-  requiresGovernance: z.boolean(),
-  requiresStreamProcessing: z.boolean(),
-  requestedAlbOrigins: z.boolean(),
-  requestedEventBridge: z.boolean(),
-  requestedQueueing: z.boolean(),
-  requestedFiles: z.boolean(),
-  requestedSearch: z.boolean(),
-  requestedCdn: z.boolean(),
-});
-const unpricedCapabilitySchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  details: z.string(),
-});
-const scenarioPolicySchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  computeCommitment: z.string(),
-  computeDiscountPct: z.number(),
-  databaseCommitment: z.string(),
-  databaseDiscountPct: z.number(),
-  haPosture: z.string(),
-  prodMultiAz: z.boolean(),
-  nonProdMultiAz: z.boolean(),
-  storageStrategy: z.string(),
-  storageMultiplier: z.number(),
-  environmentSizing: z.string(),
-  environmentScaleFactors: normalizedEnvironmentSplitSchema,
-  sharedServicesProfile: z.string(),
-  sharedServicesMultiplier: z.number(),
-  dataTransferProfile: z.string(),
-  dataTransferMultiplier: z.number(),
-  justificationProfile: z.string(),
-  expectedSavingsPct: z.number(),
-  coreBudgetFactor: z.number(),
-  addOnBudgetFactor: z.number(),
-  strategySummary: z.string(),
-});
-const selectedServiceSchema = z.object({
-  serviceId: z.string(),
-  serviceName: z.string(),
-  category: z.string(),
-  implementationStatus: z.enum(["implemented", "modeled", "planned"]),
-  required: z.boolean(),
-  role: z.string(),
-  rationale: z.string(),
-  source: z.string(),
-  capability: capabilityEntrySchema,
-});
-const serviceCoverageSchema = z.object({
-  exact: z.array(z.string()),
-  modeled: z.array(z.string()),
-  unavailable: z.array(z.string()),
-});
-const validationCheckSchema = z.object({
-  pack: z.string(),
-  id: z.string(),
-  title: z.string(),
-  status: z.enum(["pass", "warning", "fail"]),
-  severity: z.enum(["info", "warning", "error"]),
-  blocking: z.boolean(),
-  reason: z.string(),
-  remediation: z.string(),
-  details: z.string(),
-  evidence: z.any().nullable().optional(),
-});
-const validationPackSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  passed: z.boolean(),
-  blocking: z.boolean(),
-  failedRuleCount: z.number(),
-  warningRuleCount: z.number(),
-  checks: z.array(validationCheckSchema),
-});
-const validationRuleSummarySchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  details: z.string(),
-  remediation: z.string(),
-});
-const parityDetailSchema = z.object({
-  serviceId: z.string().nullable(),
-  serviceCode: z.string(),
-  region: z.string(),
-  storedMonthlyUsd: z.number(),
-  modeledMonthlyUsd: z.number(),
-  deltaUsd: z.number(),
-  supported: z.boolean(),
-  error: z.string().nullable(),
-});
-const validationSummarySchema = z.object({
-  schemaVersion: z.string(),
-  blueprintId: z.string().optional(),
-  blueprintTitle: z.string().optional(),
-  templateId: z.string().optional(),
-  templateTitle: z.string().optional(),
-  expectedMonthlyUsd: z.number().nullable().optional(),
-  storedMonthlyUsd: z.number().optional(),
-  modeledMonthlyUsd: z.number().optional(),
-  expectedRegion: z.string().nullable().optional(),
-  regions: z.array(z.string()).optional(),
-  serviceCodes: z.array(z.string()).optional(),
-  checks: z.array(validationCheckSchema),
-  packs: z.array(validationPackSchema),
-  blockingFailures: z.array(validationRuleSummarySchema),
-  warningRules: z.array(validationRuleSummarySchema),
-  hardFailures: z.array(z.string()),
-  warnings: z.array(z.string()),
-  assumptions: z.array(z.string()),
-  parityDetails: z.array(parityDetailSchema),
-  passed: z.boolean(),
-});
-const architectureSchema = z.object({
-  version: z.string(),
-  architectureId: z.string(),
-  readyToPrice: z.boolean(),
-  sourceType: z.enum(["brief", "hybrid", "blueprint"]),
-  briefSummary: z.string().nullable(),
-  blueprintId: z.string(),
-  blueprintTitle: z.string(),
-  templateId: z.string(),
-  environmentModel: z.string(),
-  architectureFamily: z.string(),
-  architectureSubtype: z.string(),
-  patternId: z.string(),
-  patternTitle: z.string(),
-  patternDescription: z.string(),
-  recommendedPatternId: z.string(),
-  recommendedArchitectureId: z.string(),
-  alternativeArchitectureIds: z.array(z.string()),
-  candidateArchitectures: z.array(architectureCandidateSchema),
-  patternCandidates: z.array(patternCandidateSchema),
-  alternativePatternIds: z.array(z.string()),
-  requiredCapabilities: z.array(z.string()),
-  budgetFit: budgetFitSchema,
-  packIds: z.array(z.string()),
-  packs: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string(),
-      description: z.string(),
-    }),
-  ),
-  requiredServiceFamilies: z.array(z.string()),
-  clientName: z.string().nullable(),
-  estimateName: z.string(),
-  notes: z.string().nullable(),
-  region: z.string(),
-  operatingSystem: z.enum(["linux", "windows"]),
-  targetMonthlyUsd: z.number().nullable(),
-  environmentSplit: normalizedEnvironmentSplitSchema,
-  includeDefaultAddOns: z.boolean(),
-  selectedServices: z.array(selectedServiceSchema),
-  serviceCoverage: serviceCoverageSchema,
-  hardConstraints: hardConstraintSchema,
-  fitGaps: z.array(z.string()),
-  excludedDefaults: z.array(z.string()),
-  requiredUnpricedCapabilities: z.array(unpricedCapabilitySchema),
-  minimumPrimaryDominanceRatio: z.number(),
-  defaultScenarioPolicies: z.array(scenarioPolicySchema),
-  blockers: z.array(z.string()),
-  blockerDetails: z.array(structuredItemSchema),
-  assumptions: z.array(z.string()),
-  warnings: z.array(z.string()),
-  unresolvedQuestions: z.array(structuredItemSchema),
-  suggestedNextActions: z.array(z.string()),
-  inference: z.object({
-    blueprint: inferenceFieldSchema,
-    region: inferenceFieldSchema,
-    targetMonthlyUsd: inferenceFieldSchema,
-    operatingSystem: inferenceFieldSchema,
-    environmentSplit: inferenceFieldSchema,
-    databaseEngine: inferenceFieldSchema,
-  }),
-  confidence: z.object({
-    score: z.number(),
-    level: z.enum(["low", "medium", "high"]),
-  }),
-});
-const serviceBreakdownSchema = z.object({
-  serviceId: z.string(),
-  kind: z.string(),
-  label: z.string(),
-  category: z.string(),
-  supportive: z.boolean(),
-  region: z.string(),
-  environment: z.string(),
-  monthlyUsd: z.number(),
-  implementationStatus: z.string(),
-  role: z.string(),
-  required: z.boolean(),
-  rationale: z.string(),
-  capability: capabilityEntrySchema,
-  details: z.string().nullable(),
-});
-const linkPlanSchema = z.object({
-  blueprintId: z.string(),
-  patternId: z.string(),
-  scenarioId: z.string(),
-  templateId: z.string(),
-  targetMonthlyUsd: z.number(),
-  coreTargetMonthlyUsd: z.number().optional(),
-  region: z.string(),
-  estimateName: z.string(),
-  notes: z.string().nullable(),
-  environmentSplit: normalizedEnvironmentSplitSchema,
-  operatingSystem: z.enum(["linux", "windows"]),
-  scenarioPolicy: scenarioPolicySchema,
-  exactAddOns: z
-    .array(
-      z.object({
-        serviceId: z.string(),
-        monthlyBudgetUsd: z.number(),
-      }),
-    )
-    .default([]),
-});
-const pricedScenarioSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  referenceMonthlyUsd: z.number(),
-  targetMonthlyUsd: z.number(),
-  modeledMonthlyUsd: z.number(),
-  expectedSavingsPct: z.number(),
-  strategySummary: z.string(),
-  deltaDrivers: z.array(z.string()),
-  scenarioPolicy: scenarioPolicySchema,
-  budgetFit: budgetFitSchema,
-  pricingConfidence: z.string(),
-  serviceBreakdown: z.array(serviceBreakdownSchema),
-  coverage: serviceCoverageSchema.extend({
-    calculatorEligible: z.boolean(),
-  }),
-  calculatorEligible: z.boolean(),
-  calculatorBlockers: z.array(z.string()),
-  linkPlan: linkPlanSchema.nullable(),
-  validation: validationSummarySchema,
-});
-const pricedArchitectureSchema = z.object({
-  architecture: architectureSchema,
-  scenarios: z.array(pricedScenarioSchema),
-  comparisonSummary: z.array(
-    z.object({
-      scenarioId: z.string(),
-      title: z.string(),
-      modeledMonthlyUsd: z.number(),
-      deltaVsBaselineUsd: z.number(),
-      deltaVsBaselinePct: z.number(),
-      calculatorEligible: z.boolean(),
-    }),
-  ),
-  recommendedScenarioId: z.string().nullable(),
-  blockers: z.array(z.string()),
-  warnings: z.array(z.string()),
-  assumptions: z.array(z.string()),
-});
-const generatedEstimateSchema = z.object({
-  estimateId: z.string(),
-  shareLink: z.string(),
-  officialShareLink: z.boolean(),
-  readOnlyViewer: z.boolean(),
-  editInstructions: z.string(),
-  blueprintId: z.string(),
-  estimateName: z.string(),
-  region: z.string(),
-  targetMonthlyUsd: z.number(),
-  modeledMonthlyUsd: z.number(),
-  storedMonthlyUsd: z.number(),
-  assumptions: z.array(z.string()),
-  warnings: z.array(z.string()),
-  serviceBreakdown: z.array(serviceBreakdownSchema),
-  validation: validationSummarySchema,
-});
-const validatedEstimateSchema = z.object({
-  estimateId: z.string(),
-  shareLink: z.string(),
-  officialShareLink: z.boolean(),
-  estimateName: z.string(),
-  totalMonthlyUsd: z.number(),
-  serviceCount: z.number(),
-  validation: validationSummarySchema,
-});
+function successToolResponse(toolName, text, structuredContent) {
+  const normalized = normalizeToolOutput(toolName, structuredContent);
 
-function textToolResponse(text, structuredContent) {
   return {
     content: [{ type: "text", text }],
+    structuredContent: normalized,
+  };
+}
+
+function toolHint(toolName, errorMessage) {
+  if (toolName === "price_architecture") {
+    return "Retry with the full architecture returned by design_architecture, or supply blueprintId/brief directly.";
+  }
+
+  if (toolName === "create_calculator_link") {
+    if (
+      /scenario is not calculator-eligible/i.test(errorMessage) ||
+      /cannot mint an official calculator link/i.test(errorMessage)
+    ) {
+      return "Pass a calculator-eligible priced scenario from price_architecture, or remove modeled/unavailable services from scope.";
+    }
+
+    return "Pass the priced scenario returned by price_architecture and confirm it includes a non-null linkPlan.";
+  }
+
+  if (toolName === "validate_calculator_link") {
+    return "Pass a calculator.aws share link or estimate id returned by AWS Pricing Calculator.";
+  }
+
+  return null;
+}
+
+function formatToolError(toolName, error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const lines = [`Tool '${toolName}' failed.`, message];
+  const hint = toolHint(toolName, message);
+
+  if (hint) {
+    lines.push("", `Hint: ${hint}`);
+  }
+
+  return lines.join("\n");
+}
+
+function inferToolErrorCode(errorMessage) {
+  if (
+    /Expected a calculator share link or estimate id/i.test(errorMessage) ||
+    /Unable to extract an estimate id/i.test(errorMessage) ||
+    /targetMonthlyUsd is too low/i.test(errorMessage)
+  ) {
+    return "invalid_input";
+  }
+
+  if (/not found/i.test(errorMessage) || /Unknown /i.test(errorMessage)) {
+    return "not_found";
+  }
+
+  if (
+    /calculator-eligible/i.test(errorMessage) ||
+    /cannot mint an official calculator link/i.test(errorMessage)
+  ) {
+    return "not_calculator_eligible";
+  }
+
+  if (/region/i.test(errorMessage) && /not available|unsupported/i.test(errorMessage)) {
+    return "unsupported_region";
+  }
+
+  if (/unsupported/i.test(errorMessage) || /missing a buildEntry implementation/i.test(errorMessage)) {
+    return "unsupported_service_combination";
+  }
+
+  if (/validation/i.test(errorMessage)) {
+    return "validation_failed";
+  }
+
+  if (/AWS|calculator|save response|fetch/i.test(errorMessage)) {
+    return "upstream_aws_error";
+  }
+
+  return "internal_error";
+}
+
+function errorToolResponse(toolName, error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const hint = toolHint(toolName, message);
+  const structuredContent = normalizeToolError({
+    contractVersion: "v1",
+    tool: toolName,
+    code: inferToolErrorCode(message),
+    message,
+    hint,
+    details: [],
+  });
+
+  return {
+    content: [{ type: "text", text: formatToolError(toolName, error) }],
     structuredContent,
+    isError: true,
+  };
+}
+
+function withToolErrorHandling(toolName, handler) {
+  return async (args) => {
+    try {
+      const result = await handler(args);
+
+      if (!result || !Array.isArray(result.content)) {
+        return errorToolResponse(toolName, "Tool returned no response payload.");
+      }
+
+      return result;
+    } catch (error) {
+      return errorToolResponse(toolName, error);
+    }
   };
 }
 
@@ -540,106 +240,75 @@ export function createServer() {
   server.registerTool(
     "list_blueprints",
     {
-      description: "List the blueprint catalog supported by the architecture engine.",
-      outputSchema: {
-        blueprints: z.array(blueprintSchema),
-      },
+      description: TOOL_CONTRACTS.list_blueprints.description,
+      outputSchema: TOOL_CONTRACTS.list_blueprints.outputSchema,
     },
-    async () => {
+    withToolErrorHandling("list_blueprints", async () => {
       const blueprints = listBlueprintCatalog();
-      return textToolResponse(
+      return successToolResponse(
+        "list_blueprints",
         blueprints.map((blueprint) => `${blueprint.id}: ${blueprint.description}`).join("\n"),
         { blueprints },
       );
-    },
+    }),
   );
 
   server.registerTool(
     "list_service_catalog",
     {
-      description:
-        "List the service registry with per-region capability states and implementation status.",
-      outputSchema: {
-        services: z.array(serviceCatalogEntrySchema),
-      },
+      description: TOOL_CONTRACTS.list_service_catalog.description,
+      outputSchema: TOOL_CONTRACTS.list_service_catalog.outputSchema,
     },
-    async () => {
+    withToolErrorHandling("list_service_catalog", async () => {
       const services = listServiceCatalog();
-      return textToolResponse(
+      return successToolResponse(
+        "list_service_catalog",
         services
           .map((service) => `${service.id}: ${service.name} (${service.implementationStatus})`)
           .join("\n"),
         { services },
       );
-    },
+    }),
   );
 
   server.registerTool(
     "design_architecture",
     {
-      description:
-        "Normalize a blueprint or rough brief into an architecture spec with explicit service capabilities and default scenario policies.",
-      inputSchema: {
-        blueprintId: blueprintIdEnum.optional(),
-        brief: z.string().optional(),
-        targetMonthlyUsd: z.number().positive().optional(),
-        region: z.string().optional().describe(`Optional explicit region. Defaults to ${DEFAULT_REGION}.`),
-        clientName: z.string().optional(),
-        estimateName: z.string().optional(),
-        notes: z.string().optional(),
-        operatingSystem: z.enum(["linux", "windows"]).optional(),
-        environmentSplit: environmentSplitSchema.optional(),
-        includeDefaultAddOns: z.boolean().optional(),
-        serviceIds: z.array(z.string()).optional(),
-        scenarioPolicies: z.array(scenarioPolicySchema.partial()).optional(),
-      },
-      outputSchema: architectureSchema.shape,
+      description: TOOL_CONTRACTS.design_architecture.description,
+      inputSchema: TOOL_CONTRACTS.design_architecture.inputSchema,
+      outputSchema: TOOL_CONTRACTS.design_architecture.outputSchema,
     },
-    async (args) => {
+    withToolErrorHandling("design_architecture", async (args) => {
       const architecture = designArchitecture(args);
-      return textToolResponse(renderArchitecture(architecture), architecture);
-    },
+      return successToolResponse(
+        "design_architecture",
+        renderArchitecture(architecture),
+        architecture,
+      );
+    }),
   );
 
   server.registerTool(
     "price_architecture",
     {
-      description:
-        "Price one or more scenario policies for an architecture and report exact, modeled, and unavailable service coverage.",
-      inputSchema: {
-        architecture: architectureSchema.optional(),
-        blueprintId: blueprintIdEnum.optional(),
-        brief: z.string().optional(),
-        targetMonthlyUsd: z.number().positive().optional(),
-        region: z.string().optional(),
-        clientName: z.string().optional(),
-        estimateName: z.string().optional(),
-        notes: z.string().optional(),
-        operatingSystem: z.enum(["linux", "windows"]).optional(),
-        environmentSplit: environmentSplitSchema.optional(),
-        includeDefaultAddOns: z.boolean().optional(),
-        serviceIds: z.array(z.string()).optional(),
-        scenarioPolicies: z.array(scenarioPolicySchema.partial()).optional(),
-      },
-      outputSchema: pricedArchitectureSchema.shape,
+      description: TOOL_CONTRACTS.price_architecture.description,
+      inputSchema: TOOL_CONTRACTS.price_architecture.inputSchema,
+      outputSchema: TOOL_CONTRACTS.price_architecture.outputSchema,
     },
-    async (args) => {
+    withToolErrorHandling("price_architecture", async (args) => {
       const priced = priceArchitecture(args);
-      return textToolResponse(renderPricedArchitecture(priced), priced);
-    },
+      return successToolResponse("price_architecture", renderPricedArchitecture(priced), priced);
+    }),
   );
 
   server.registerTool(
     "create_calculator_link",
     {
-      description:
-        "Create an official AWS calculator share link from an exact priced scenario and validate the saved estimate.",
-      inputSchema: {
-        pricedScenario: pricedScenarioSchema,
-      },
-      outputSchema: generatedEstimateSchema.shape,
+      description: TOOL_CONTRACTS.create_calculator_link.description,
+      inputSchema: TOOL_CONTRACTS.create_calculator_link.inputSchema,
+      outputSchema: TOOL_CONTRACTS.create_calculator_link.outputSchema,
     },
-    async ({ pricedScenario }) => {
+    withToolErrorHandling("create_calculator_link", async ({ pricedScenario }) => {
       const built = buildCalculatorEstimateFromScenario({ pricedScenario });
       const saved = await saveEstimate(built.estimate);
       const fetched = await fetchSavedEstimate(saved.savedKey);
@@ -673,30 +342,22 @@ export function createServer() {
         validation,
       };
 
-      return textToolResponse(renderGeneratedEstimate(result), result);
-    },
+      return successToolResponse(
+        "create_calculator_link",
+        renderGeneratedEstimate(result),
+        result,
+      );
+    }),
   );
 
   server.registerTool(
     "validate_calculator_link",
     {
-      description:
-        "Validate an AWS calculator share link for pricing integrity, architecture completeness, and funding readiness.",
-      inputSchema: {
-        shareLinkOrEstimateId: z.string(),
-        blueprintId: blueprintIdEnum.optional(),
-        expectedMonthlyUsd: z.number().positive().optional(),
-        expectedRegion: z.string().optional(),
-        budgetTolerancePct: z
-          .number()
-          .positive()
-          .max(1)
-          .optional()
-          .describe(`Optional tolerance. Defaults to ${DEFAULT_BUDGET_TOLERANCE_PCT}.`),
-      },
-      outputSchema: validatedEstimateSchema.shape,
+      description: TOOL_CONTRACTS.validate_calculator_link.description,
+      inputSchema: TOOL_CONTRACTS.validate_calculator_link.inputSchema,
+      outputSchema: TOOL_CONTRACTS.validate_calculator_link.outputSchema,
     },
-    async ({
+    withToolErrorHandling("validate_calculator_link", async ({
       shareLinkOrEstimateId,
       blueprintId,
       expectedMonthlyUsd,
@@ -722,8 +383,12 @@ export function createServer() {
         validation,
       };
 
-      return textToolResponse(renderValidatedEstimate(result), result);
-    },
+      return successToolResponse(
+        "validate_calculator_link",
+        renderValidatedEstimate(result),
+        result,
+      );
+    }),
   );
 
   return server;

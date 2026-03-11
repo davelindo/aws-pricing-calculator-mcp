@@ -1,0 +1,3493 @@
+{
+  "$id": "aws-pricing-calculator-mcp.contract.v1.tools.price_architecture.output",
+  "title": "price_architecture output",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "architecture": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "architectureId": {
+          "type": "string"
+        },
+        "readyToPrice": {
+          "type": "boolean"
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": [
+            "brief",
+            "hybrid",
+            "blueprint"
+          ]
+        },
+        "briefSummary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blueprintId": {
+          "type": "string",
+          "enum": [
+            "container-platform",
+            "linux-web-stack",
+            "windows-app-stack",
+            "edge-api-platform",
+            "event-driven-platform",
+            "data-platform-lite",
+            "modernization-platform",
+            "enterprise-data-platform",
+            "enterprise-data-lake",
+            "lake-foundation",
+            "lakehouse-platform",
+            "streaming-data-platform",
+            "warehouse-centric-analytics"
+          ]
+        },
+        "blueprintTitle": {
+          "type": "string"
+        },
+        "templateId": {
+          "type": "string",
+          "enum": [
+            "eks-rds-standard",
+            "linux-heavy",
+            "windows-heavy",
+            "edge-api-serverless-standard",
+            "edge-origin-platform-standard",
+            "private-api-front-door-standard",
+            "event-driven-standard",
+            "modernization-fargate-standard",
+            "windows-sqlserver-standard",
+            "windows-files-standard",
+            "container-api-front-door-standard",
+            "container-private-service-standard",
+            "container-search-content-standard",
+            "linux-web-cdn-standard",
+            "linux-web-private-standard",
+            "lake-foundation-standard",
+            "lakehouse-platform-standard",
+            "streaming-data-platform-standard",
+            "warehouse-centric-analytics-standard",
+            "enterprise-data-lake-standard",
+            "data-platform-standard",
+            "enterprise-data-standard"
+          ]
+        },
+        "environmentModel": {
+          "type": "string"
+        },
+        "architectureFamily": {
+          "type": "string"
+        },
+        "architectureSubtype": {
+          "type": "string"
+        },
+        "patternId": {
+          "type": "string",
+          "enum": [
+            "eks-app-platform",
+            "eks-api-front-door",
+            "eks-private-service",
+            "eks-search-content-platform",
+            "container-platform.default",
+            "ec2-web-with-postgres",
+            "ec2-web-with-cdn",
+            "ec2-web-with-private-service",
+            "linux-web-stack.default",
+            "windows-iis-with-postgres",
+            "windows-iis-with-sqlserver",
+            "windows-files-app",
+            "windows-private-sql-service",
+            "windows-app-stack.default",
+            "serverless-edge-api",
+            "cloudfront-alb-origin-app",
+            "private-api-front-door",
+            "edge-api-platform.default",
+            "async-worker-platform",
+            "pubsub-fanout-platform",
+            "event-bus-integration-platform",
+            "event-driven-platform.default",
+            "data-platform-lite.default",
+            "hybrid-transition-state",
+            "ecs-fargate-target-state",
+            "modernization-platform.default",
+            "enterprise-data-platform.default",
+            "enterprise-data-lake.default",
+            "lake-foundation-basic",
+            "lake-foundation-governed",
+            "lake-foundation.default",
+            "lakehouse-serving",
+            "lakehouse-platform.default",
+            "stream-analytics-platform",
+            "streaming-data-platform.default",
+            "redshift-bi-warehouse",
+            "warehouse-centric-analytics.default"
+          ]
+        },
+        "patternTitle": {
+          "type": "string"
+        },
+        "patternDescription": {
+          "type": "string"
+        },
+        "recommendedPatternId": {
+          "type": "string",
+          "enum": [
+            "eks-app-platform",
+            "eks-api-front-door",
+            "eks-private-service",
+            "eks-search-content-platform",
+            "container-platform.default",
+            "ec2-web-with-postgres",
+            "ec2-web-with-cdn",
+            "ec2-web-with-private-service",
+            "linux-web-stack.default",
+            "windows-iis-with-postgres",
+            "windows-iis-with-sqlserver",
+            "windows-files-app",
+            "windows-private-sql-service",
+            "windows-app-stack.default",
+            "serverless-edge-api",
+            "cloudfront-alb-origin-app",
+            "private-api-front-door",
+            "edge-api-platform.default",
+            "async-worker-platform",
+            "pubsub-fanout-platform",
+            "event-bus-integration-platform",
+            "event-driven-platform.default",
+            "data-platform-lite.default",
+            "hybrid-transition-state",
+            "ecs-fargate-target-state",
+            "modernization-platform.default",
+            "enterprise-data-platform.default",
+            "enterprise-data-lake.default",
+            "lake-foundation-basic",
+            "lake-foundation-governed",
+            "lake-foundation.default",
+            "lakehouse-serving",
+            "lakehouse-platform.default",
+            "stream-analytics-platform",
+            "streaming-data-platform.default",
+            "redshift-bi-warehouse",
+            "warehouse-centric-analytics.default"
+          ]
+        },
+        "recommendedArchitectureId": {
+          "type": "string",
+          "enum": [
+            "container-platform",
+            "linux-web-stack",
+            "windows-app-stack",
+            "edge-api-platform",
+            "event-driven-platform",
+            "data-platform-lite",
+            "modernization-platform",
+            "enterprise-data-platform",
+            "enterprise-data-lake",
+            "lake-foundation",
+            "lakehouse-platform",
+            "streaming-data-platform",
+            "warehouse-centric-analytics"
+          ]
+        },
+        "alternativeArchitectureIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "container-platform",
+              "linux-web-stack",
+              "windows-app-stack",
+              "edge-api-platform",
+              "event-driven-platform",
+              "data-platform-lite",
+              "modernization-platform",
+              "enterprise-data-platform",
+              "enterprise-data-lake",
+              "lake-foundation",
+              "lakehouse-platform",
+              "streaming-data-platform",
+              "warehouse-centric-analytics"
+            ]
+          }
+        },
+        "candidateArchitectures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "blueprintId": {
+                "type": "string",
+                "enum": [
+                  "container-platform",
+                  "linux-web-stack",
+                  "windows-app-stack",
+                  "edge-api-platform",
+                  "event-driven-platform",
+                  "data-platform-lite",
+                  "modernization-platform",
+                  "enterprise-data-platform",
+                  "enterprise-data-lake",
+                  "lake-foundation",
+                  "lakehouse-platform",
+                  "streaming-data-platform",
+                  "warehouse-centric-analytics"
+                ]
+              },
+              "blueprintTitle": {
+                "type": "string"
+              },
+              "architectureFamily": {
+                "type": "string"
+              },
+              "architectureSubtype": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "requiredCapabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "requiredServiceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                }
+              },
+              "optionalServiceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                }
+              },
+              "packIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "fitScore": {
+                "type": "number"
+              },
+              "matchedSignals": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "budgetFit": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "fits",
+                      "underspecified",
+                      "nearest_fit_above",
+                      "nearest_fit_below",
+                      "incompatible_budget"
+                    ]
+                  },
+                  "details": {
+                    "type": "string"
+                  },
+                  "deltaUsd": {
+                    "type": "number"
+                  },
+                  "guidance": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "minimumMonthlyUsd": {
+                            "type": "number"
+                          },
+                          "preferredMinMonthlyUsd": {
+                            "type": "number"
+                          },
+                          "preferredMaxMonthlyUsd": {
+                            "type": "number"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "status",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              "rationale": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "explicit": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "blueprintId",
+              "blueprintTitle",
+              "architectureFamily",
+              "architectureSubtype",
+              "summary",
+              "requiredCapabilities",
+              "requiredServiceIds",
+              "optionalServiceIds",
+              "packIds",
+              "fitScore",
+              "matchedSignals",
+              "budgetFit",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "patternCandidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "eks-app-platform",
+                  "eks-api-front-door",
+                  "eks-private-service",
+                  "eks-search-content-platform",
+                  "container-platform.default",
+                  "ec2-web-with-postgres",
+                  "ec2-web-with-cdn",
+                  "ec2-web-with-private-service",
+                  "linux-web-stack.default",
+                  "windows-iis-with-postgres",
+                  "windows-iis-with-sqlserver",
+                  "windows-files-app",
+                  "windows-private-sql-service",
+                  "windows-app-stack.default",
+                  "serverless-edge-api",
+                  "cloudfront-alb-origin-app",
+                  "private-api-front-door",
+                  "edge-api-platform.default",
+                  "async-worker-platform",
+                  "pubsub-fanout-platform",
+                  "event-bus-integration-platform",
+                  "event-driven-platform.default",
+                  "data-platform-lite.default",
+                  "hybrid-transition-state",
+                  "ecs-fargate-target-state",
+                  "modernization-platform.default",
+                  "enterprise-data-platform.default",
+                  "enterprise-data-lake.default",
+                  "lake-foundation-basic",
+                  "lake-foundation-governed",
+                  "lake-foundation.default",
+                  "lakehouse-serving",
+                  "lakehouse-platform.default",
+                  "stream-analytics-platform",
+                  "streaming-data-platform.default",
+                  "redshift-bi-warehouse",
+                  "warehouse-centric-analytics.default"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "fitScore": {
+                "type": "number"
+              },
+              "budgetFit": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "fits",
+                      "underspecified",
+                      "nearest_fit_above",
+                      "nearest_fit_below",
+                      "incompatible_budget"
+                    ]
+                  },
+                  "details": {
+                    "type": "string"
+                  },
+                  "deltaUsd": {
+                    "type": "number"
+                  },
+                  "guidance": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "minimumMonthlyUsd": {
+                            "type": "number"
+                          },
+                          "preferredMinMonthlyUsd": {
+                            "type": "number"
+                          },
+                          "preferredMaxMonthlyUsd": {
+                            "type": "number"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "status",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              "requiredServiceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                }
+              },
+              "primaryServiceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                }
+              },
+              "forbiddenServiceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                }
+              },
+              "requiredUnpricedCapabilities": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "details"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "traits": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rationale": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "description",
+              "fitScore",
+              "budgetFit",
+              "requiredServiceIds",
+              "primaryServiceIds",
+              "forbiddenServiceIds",
+              "requiredUnpricedCapabilities",
+              "traits",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "alternativePatternIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "eks-app-platform",
+              "eks-api-front-door",
+              "eks-private-service",
+              "eks-search-content-platform",
+              "container-platform.default",
+              "ec2-web-with-postgres",
+              "ec2-web-with-cdn",
+              "ec2-web-with-private-service",
+              "linux-web-stack.default",
+              "windows-iis-with-postgres",
+              "windows-iis-with-sqlserver",
+              "windows-files-app",
+              "windows-private-sql-service",
+              "windows-app-stack.default",
+              "serverless-edge-api",
+              "cloudfront-alb-origin-app",
+              "private-api-front-door",
+              "edge-api-platform.default",
+              "async-worker-platform",
+              "pubsub-fanout-platform",
+              "event-bus-integration-platform",
+              "event-driven-platform.default",
+              "data-platform-lite.default",
+              "hybrid-transition-state",
+              "ecs-fargate-target-state",
+              "modernization-platform.default",
+              "enterprise-data-platform.default",
+              "enterprise-data-lake.default",
+              "lake-foundation-basic",
+              "lake-foundation-governed",
+              "lake-foundation.default",
+              "lakehouse-serving",
+              "lakehouse-platform.default",
+              "stream-analytics-platform",
+              "streaming-data-platform.default",
+              "redshift-bi-warehouse",
+              "warehouse-centric-analytics.default"
+            ]
+          }
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "budgetFit": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "fits",
+                "underspecified",
+                "nearest_fit_above",
+                "nearest_fit_below",
+                "incompatible_budget"
+              ]
+            },
+            "details": {
+              "type": "string"
+            },
+            "deltaUsd": {
+              "type": "number"
+            },
+            "guidance": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "minimumMonthlyUsd": {
+                      "type": "number"
+                    },
+                    "preferredMinMonthlyUsd": {
+                      "type": "number"
+                    },
+                    "preferredMaxMonthlyUsd": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "details"
+          ],
+          "additionalProperties": false
+        },
+        "packIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "packs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "requiredServiceFamilies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "clientName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "estimateName": {
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "region": {
+          "type": "string"
+        },
+        "operatingSystem": {
+          "type": "string",
+          "enum": [
+            "linux",
+            "windows"
+          ]
+        },
+        "targetMonthlyUsd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "environmentSplit": {
+          "type": "object",
+          "properties": {
+            "dev": {
+              "type": "number"
+            },
+            "staging": {
+              "type": "number"
+            },
+            "prod": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "dev",
+            "staging",
+            "prod"
+          ],
+          "additionalProperties": false
+        },
+        "includeDefaultAddOns": {
+          "type": "boolean"
+        },
+        "selectedServices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "serviceId": {
+                "type": "string",
+                "enum": [
+                  "amazon-eks",
+                  "amazon-ec2",
+                  "amazon-athena",
+                  "amazon-redshift",
+                  "aws-glue-etl",
+                  "aws-glue-data-catalog",
+                  "aws-glue-crawlers",
+                  "amazon-kinesis-firehose",
+                  "amazon-rds-postgresql",
+                  "amazon-rds-mysql",
+                  "amazon-rds-sqlserver",
+                  "amazon-aurora-postgresql",
+                  "amazon-aurora-mysql",
+                  "amazon-elasticache-redis",
+                  "amazon-vpc-nat",
+                  "application-load-balancer",
+                  "network-load-balancer",
+                  "amazon-s3",
+                  "amazon-efs",
+                  "amazon-ebs",
+                  "amazon-ecs-ec2",
+                  "amazon-cloudfront",
+                  "amazon-lambda",
+                  "amazon-dynamodb",
+                  "amazon-api-gateway-http",
+                  "amazon-route53",
+                  "amazon-sqs",
+                  "amazon-sns",
+                  "amazon-cloudwatch",
+                  "amazon-eventbridge",
+                  "aws-waf-v2",
+                  "amazon-fsx-windows",
+                  "amazon-opensearch",
+                  "amazon-vpc-endpoints",
+                  "amazon-ecs-fargate"
+                ]
+              },
+              "serviceName": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "compute",
+                  "analytics",
+                  "integration",
+                  "metadata",
+                  "database",
+                  "networking",
+                  "storage",
+                  "edge",
+                  "operations",
+                  "security"
+                ]
+              },
+              "implementationStatus": {
+                "type": "string",
+                "enum": [
+                  "implemented",
+                  "modeled",
+                  "planned"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "role": {
+                "type": "string"
+              },
+              "rationale": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "blueprint-required",
+                  "blueprint-default",
+                  "explicit",
+                  "brief-inferred"
+                ]
+              },
+              "capability": {
+                "type": "object",
+                "properties": {
+                  "region": {
+                    "type": "string"
+                  },
+                  "support": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "modeled",
+                      "unavailable"
+                    ]
+                  },
+                  "calculatorSaveSupported": {
+                    "type": "boolean"
+                  },
+                  "validationSupported": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "region",
+                  "support",
+                  "calculatorSaveSupported",
+                  "validationSupported",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "serviceId",
+              "serviceName",
+              "category",
+              "implementationStatus",
+              "required",
+              "role",
+              "rationale",
+              "source",
+              "capability"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "serviceCoverage": {
+          "type": "object",
+          "properties": {
+            "exact": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "amazon-eks",
+                  "amazon-ec2",
+                  "amazon-athena",
+                  "amazon-redshift",
+                  "aws-glue-etl",
+                  "aws-glue-data-catalog",
+                  "aws-glue-crawlers",
+                  "amazon-kinesis-firehose",
+                  "amazon-rds-postgresql",
+                  "amazon-rds-mysql",
+                  "amazon-rds-sqlserver",
+                  "amazon-aurora-postgresql",
+                  "amazon-aurora-mysql",
+                  "amazon-elasticache-redis",
+                  "amazon-vpc-nat",
+                  "application-load-balancer",
+                  "network-load-balancer",
+                  "amazon-s3",
+                  "amazon-efs",
+                  "amazon-ebs",
+                  "amazon-ecs-ec2",
+                  "amazon-cloudfront",
+                  "amazon-lambda",
+                  "amazon-dynamodb",
+                  "amazon-api-gateway-http",
+                  "amazon-route53",
+                  "amazon-sqs",
+                  "amazon-sns",
+                  "amazon-cloudwatch",
+                  "amazon-eventbridge",
+                  "aws-waf-v2",
+                  "amazon-fsx-windows",
+                  "amazon-opensearch",
+                  "amazon-vpc-endpoints",
+                  "amazon-ecs-fargate"
+                ]
+              }
+            },
+            "modeled": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "amazon-eks",
+                  "amazon-ec2",
+                  "amazon-athena",
+                  "amazon-redshift",
+                  "aws-glue-etl",
+                  "aws-glue-data-catalog",
+                  "aws-glue-crawlers",
+                  "amazon-kinesis-firehose",
+                  "amazon-rds-postgresql",
+                  "amazon-rds-mysql",
+                  "amazon-rds-sqlserver",
+                  "amazon-aurora-postgresql",
+                  "amazon-aurora-mysql",
+                  "amazon-elasticache-redis",
+                  "amazon-vpc-nat",
+                  "application-load-balancer",
+                  "network-load-balancer",
+                  "amazon-s3",
+                  "amazon-efs",
+                  "amazon-ebs",
+                  "amazon-ecs-ec2",
+                  "amazon-cloudfront",
+                  "amazon-lambda",
+                  "amazon-dynamodb",
+                  "amazon-api-gateway-http",
+                  "amazon-route53",
+                  "amazon-sqs",
+                  "amazon-sns",
+                  "amazon-cloudwatch",
+                  "amazon-eventbridge",
+                  "aws-waf-v2",
+                  "amazon-fsx-windows",
+                  "amazon-opensearch",
+                  "amazon-vpc-endpoints",
+                  "amazon-ecs-fargate"
+                ]
+              }
+            },
+            "unavailable": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "amazon-eks",
+                  "amazon-ec2",
+                  "amazon-athena",
+                  "amazon-redshift",
+                  "aws-glue-etl",
+                  "aws-glue-data-catalog",
+                  "aws-glue-crawlers",
+                  "amazon-kinesis-firehose",
+                  "amazon-rds-postgresql",
+                  "amazon-rds-mysql",
+                  "amazon-rds-sqlserver",
+                  "amazon-aurora-postgresql",
+                  "amazon-aurora-mysql",
+                  "amazon-elasticache-redis",
+                  "amazon-vpc-nat",
+                  "application-load-balancer",
+                  "network-load-balancer",
+                  "amazon-s3",
+                  "amazon-efs",
+                  "amazon-ebs",
+                  "amazon-ecs-ec2",
+                  "amazon-cloudfront",
+                  "amazon-lambda",
+                  "amazon-dynamodb",
+                  "amazon-api-gateway-http",
+                  "amazon-route53",
+                  "amazon-sqs",
+                  "amazon-sns",
+                  "amazon-cloudwatch",
+                  "amazon-eventbridge",
+                  "aws-waf-v2",
+                  "amazon-fsx-windows",
+                  "amazon-opensearch",
+                  "amazon-vpc-endpoints",
+                  "amazon-ecs-fargate"
+                ]
+              }
+            }
+          },
+          "required": [
+            "exact",
+            "modeled",
+            "unavailable"
+          ],
+          "additionalProperties": false
+        },
+        "hardConstraints": {
+          "type": "object",
+          "properties": {
+            "requestedDatabase": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "requiresServerless": {
+              "type": "boolean"
+            },
+            "requiresPrivateConnectivity": {
+              "type": "boolean"
+            },
+            "requiresFargatePrimary": {
+              "type": "boolean"
+            },
+            "requiresGovernance": {
+              "type": "boolean"
+            },
+            "requiresStreamProcessing": {
+              "type": "boolean"
+            },
+            "requestedAlbOrigins": {
+              "type": "boolean"
+            },
+            "requestedEventBridge": {
+              "type": "boolean"
+            },
+            "requestedQueueing": {
+              "type": "boolean"
+            },
+            "requestedFiles": {
+              "type": "boolean"
+            },
+            "requestedSearch": {
+              "type": "boolean"
+            },
+            "requestedCdn": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "requestedDatabase",
+            "requiresServerless",
+            "requiresPrivateConnectivity",
+            "requiresFargatePrimary",
+            "requiresGovernance",
+            "requiresStreamProcessing",
+            "requestedAlbOrigins",
+            "requestedEventBridge",
+            "requestedQueueing",
+            "requestedFiles",
+            "requestedSearch",
+            "requestedCdn"
+          ],
+          "additionalProperties": false
+        },
+        "fitGaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "excludedDefaults": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requiredUnpricedCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "details": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "details"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "minimumPrimaryDominanceRatio": {
+          "type": "number"
+        },
+        "defaultScenarioPolicies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "computeCommitment": {
+                "type": "string",
+                "enum": [
+                  "on-demand",
+                  "savings-plans",
+                  "reserved",
+                  "reserved-heavy"
+                ]
+              },
+              "computeDiscountPct": {
+                "type": "number"
+              },
+              "databaseCommitment": {
+                "type": "string",
+                "enum": [
+                  "on-demand",
+                  "reserved",
+                  "reserved-heavy"
+                ]
+              },
+              "databaseDiscountPct": {
+                "type": "number"
+              },
+              "haPosture": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "targeted-ha",
+                  "selective-ha"
+                ]
+              },
+              "prodMultiAz": {
+                "type": "boolean"
+              },
+              "nonProdMultiAz": {
+                "type": "boolean"
+              },
+              "storageStrategy": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "tuned",
+                  "lean"
+                ]
+              },
+              "storageMultiplier": {
+                "type": "number"
+              },
+              "environmentSizing": {
+                "type": "string",
+                "enum": [
+                  "full-footprint",
+                  "right-sized-non-prod",
+                  "lean-non-prod"
+                ]
+              },
+              "environmentScaleFactors": {
+                "type": "object",
+                "properties": {
+                  "dev": {
+                    "type": "number"
+                  },
+                  "staging": {
+                    "type": "number"
+                  },
+                  "prod": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "dev",
+                  "staging",
+                  "prod"
+                ],
+                "additionalProperties": false
+              },
+              "sharedServicesProfile": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "trimmed",
+                  "lean"
+                ]
+              },
+              "sharedServicesMultiplier": {
+                "type": "number"
+              },
+              "dataTransferProfile": {
+                "type": "string",
+                "enum": [
+                  "baseline",
+                  "reviewed",
+                  "minimized"
+                ]
+              },
+              "dataTransferMultiplier": {
+                "type": "number"
+              },
+              "justificationProfile": {
+                "type": "string",
+                "enum": [
+                  "default-baseline",
+                  "cost-optimized",
+                  "high-optimization"
+                ]
+              },
+              "expectedSavingsPct": {
+                "type": "number"
+              },
+              "coreBudgetFactor": {
+                "type": "number"
+              },
+              "addOnBudgetFactor": {
+                "type": "number"
+              },
+              "strategySummary": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "computeCommitment",
+              "computeDiscountPct",
+              "databaseCommitment",
+              "databaseDiscountPct",
+              "haPosture",
+              "prodMultiAz",
+              "nonProdMultiAz",
+              "storageStrategy",
+              "storageMultiplier",
+              "environmentSizing",
+              "environmentScaleFactors",
+              "sharedServicesProfile",
+              "sharedServicesMultiplier",
+              "dataTransferProfile",
+              "dataTransferMultiplier",
+              "justificationProfile",
+              "expectedSavingsPct",
+              "coreBudgetFactor",
+              "addOnBudgetFactor",
+              "strategySummary"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blockerDetails": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "remediation": {
+                "type": "string"
+              },
+              "blocking": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "field",
+              "message",
+              "remediation",
+              "blocking"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unresolvedQuestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "remediation": {
+                "type": "string"
+              },
+              "blocking": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "field",
+              "message",
+              "remediation",
+              "blocking"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "suggestedNextActions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inference": {
+          "type": "object",
+          "properties": {
+            "blueprint": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "enum": [
+                    "container-platform",
+                    "linux-web-stack",
+                    "windows-app-stack",
+                    "edge-api-platform",
+                    "event-driven-platform",
+                    "data-platform-lite",
+                    "modernization-platform",
+                    "enterprise-data-platform",
+                    "enterprise-data-lake",
+                    "lake-foundation",
+                    "lakehouse-platform",
+                    "streaming-data-platform",
+                    "warehouse-centric-analytics"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "explicit",
+                    "brief-inferred",
+                    "blueprint-default",
+                    "default",
+                    "missing"
+                  ]
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "source",
+                "confidence"
+              ],
+              "additionalProperties": false
+            },
+            "region": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "explicit",
+                    "brief-inferred",
+                    "blueprint-default",
+                    "default",
+                    "missing"
+                  ]
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "source",
+                "confidence"
+              ],
+              "additionalProperties": false
+            },
+            "targetMonthlyUsd": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "explicit",
+                    "brief-inferred",
+                    "blueprint-default",
+                    "default",
+                    "missing"
+                  ]
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "source",
+                "confidence"
+              ],
+              "additionalProperties": false
+            },
+            "operatingSystem": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "enum": [
+                    "linux",
+                    "windows"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "explicit",
+                    "brief-inferred",
+                    "blueprint-default",
+                    "default",
+                    "missing"
+                  ]
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "source",
+                "confidence"
+              ],
+              "additionalProperties": false
+            },
+            "environmentSplit": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "dev": {
+                      "type": "number"
+                    },
+                    "staging": {
+                      "type": "number"
+                    },
+                    "prod": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "dev",
+                    "staging",
+                    "prod"
+                  ],
+                  "additionalProperties": false
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "explicit",
+                    "brief-inferred",
+                    "blueprint-default",
+                    "default",
+                    "missing"
+                  ]
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "source",
+                "confidence"
+              ],
+              "additionalProperties": false
+            },
+            "databaseEngine": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "explicit",
+                    "brief-inferred",
+                    "blueprint-default",
+                    "default",
+                    "missing"
+                  ]
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "source",
+                "confidence"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "blueprint",
+            "region",
+            "targetMonthlyUsd",
+            "operatingSystem",
+            "environmentSplit",
+            "databaseEngine"
+          ],
+          "additionalProperties": false
+        },
+        "confidence": {
+          "type": "object",
+          "properties": {
+            "score": {
+              "type": "number"
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          },
+          "required": [
+            "score",
+            "level"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "architectureId",
+        "readyToPrice",
+        "sourceType",
+        "briefSummary",
+        "blueprintId",
+        "blueprintTitle",
+        "templateId",
+        "environmentModel",
+        "architectureFamily",
+        "architectureSubtype",
+        "patternId",
+        "patternTitle",
+        "patternDescription",
+        "recommendedPatternId",
+        "recommendedArchitectureId",
+        "alternativeArchitectureIds",
+        "candidateArchitectures",
+        "patternCandidates",
+        "alternativePatternIds",
+        "requiredCapabilities",
+        "budgetFit",
+        "packIds",
+        "packs",
+        "requiredServiceFamilies",
+        "clientName",
+        "estimateName",
+        "notes",
+        "region",
+        "operatingSystem",
+        "targetMonthlyUsd",
+        "environmentSplit",
+        "includeDefaultAddOns",
+        "selectedServices",
+        "serviceCoverage",
+        "hardConstraints",
+        "fitGaps",
+        "excludedDefaults",
+        "requiredUnpricedCapabilities",
+        "minimumPrimaryDominanceRatio",
+        "defaultScenarioPolicies",
+        "blockers",
+        "blockerDetails",
+        "assumptions",
+        "warnings",
+        "unresolvedQuestions",
+        "suggestedNextActions",
+        "inference",
+        "confidence"
+      ],
+      "additionalProperties": false
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "referenceMonthlyUsd": {
+            "type": "number"
+          },
+          "targetMonthlyUsd": {
+            "type": "number"
+          },
+          "modeledMonthlyUsd": {
+            "type": "number"
+          },
+          "expectedSavingsPct": {
+            "type": "number"
+          },
+          "strategySummary": {
+            "type": "string"
+          },
+          "deltaDrivers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scenarioPolicy": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "computeCommitment": {
+                "type": "string",
+                "enum": [
+                  "on-demand",
+                  "savings-plans",
+                  "reserved",
+                  "reserved-heavy"
+                ]
+              },
+              "computeDiscountPct": {
+                "type": "number"
+              },
+              "databaseCommitment": {
+                "type": "string",
+                "enum": [
+                  "on-demand",
+                  "reserved",
+                  "reserved-heavy"
+                ]
+              },
+              "databaseDiscountPct": {
+                "type": "number"
+              },
+              "haPosture": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "targeted-ha",
+                  "selective-ha"
+                ]
+              },
+              "prodMultiAz": {
+                "type": "boolean"
+              },
+              "nonProdMultiAz": {
+                "type": "boolean"
+              },
+              "storageStrategy": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "tuned",
+                  "lean"
+                ]
+              },
+              "storageMultiplier": {
+                "type": "number"
+              },
+              "environmentSizing": {
+                "type": "string",
+                "enum": [
+                  "full-footprint",
+                  "right-sized-non-prod",
+                  "lean-non-prod"
+                ]
+              },
+              "environmentScaleFactors": {
+                "type": "object",
+                "properties": {
+                  "dev": {
+                    "type": "number"
+                  },
+                  "staging": {
+                    "type": "number"
+                  },
+                  "prod": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "dev",
+                  "staging",
+                  "prod"
+                ],
+                "additionalProperties": false
+              },
+              "sharedServicesProfile": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "trimmed",
+                  "lean"
+                ]
+              },
+              "sharedServicesMultiplier": {
+                "type": "number"
+              },
+              "dataTransferProfile": {
+                "type": "string",
+                "enum": [
+                  "baseline",
+                  "reviewed",
+                  "minimized"
+                ]
+              },
+              "dataTransferMultiplier": {
+                "type": "number"
+              },
+              "justificationProfile": {
+                "type": "string",
+                "enum": [
+                  "default-baseline",
+                  "cost-optimized",
+                  "high-optimization"
+                ]
+              },
+              "expectedSavingsPct": {
+                "type": "number"
+              },
+              "coreBudgetFactor": {
+                "type": "number"
+              },
+              "addOnBudgetFactor": {
+                "type": "number"
+              },
+              "strategySummary": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "computeCommitment",
+              "computeDiscountPct",
+              "databaseCommitment",
+              "databaseDiscountPct",
+              "haPosture",
+              "prodMultiAz",
+              "nonProdMultiAz",
+              "storageStrategy",
+              "storageMultiplier",
+              "environmentSizing",
+              "environmentScaleFactors",
+              "sharedServicesProfile",
+              "sharedServicesMultiplier",
+              "dataTransferProfile",
+              "dataTransferMultiplier",
+              "justificationProfile",
+              "expectedSavingsPct",
+              "coreBudgetFactor",
+              "addOnBudgetFactor",
+              "strategySummary"
+            ],
+            "additionalProperties": false
+          },
+          "budgetFit": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "fits",
+                  "underspecified",
+                  "nearest_fit_above",
+                  "nearest_fit_below",
+                  "incompatible_budget"
+                ]
+              },
+              "details": {
+                "type": "string"
+              },
+              "deltaUsd": {
+                "type": "number"
+              },
+              "guidance": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "minimumMonthlyUsd": {
+                        "type": "number"
+                      },
+                      "preferredMinMonthlyUsd": {
+                        "type": "number"
+                      },
+                      "preferredMaxMonthlyUsd": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "status",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "pricingConfidence": {
+            "type": "string",
+            "enum": [
+              "exact-or-modeled",
+              "review-required"
+            ]
+          },
+          "serviceBreakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "serviceId": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string",
+                  "enum": [
+                    "compute",
+                    "analytics",
+                    "integration",
+                    "metadata",
+                    "database",
+                    "networking",
+                    "storage",
+                    "edge",
+                    "operations",
+                    "security",
+                    "supportive"
+                  ]
+                },
+                "supportive": {
+                  "type": "boolean"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "environment": {
+                  "type": "string"
+                },
+                "monthlyUsd": {
+                  "type": "number"
+                },
+                "implementationStatus": {
+                  "type": "string",
+                  "enum": [
+                    "implemented",
+                    "modeled",
+                    "planned"
+                  ]
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "rationale": {
+                  "type": "string"
+                },
+                "capability": {
+                  "type": "object",
+                  "properties": {
+                    "region": {
+                      "type": "string"
+                    },
+                    "support": {
+                      "type": "string",
+                      "enum": [
+                        "exact",
+                        "modeled",
+                        "unavailable"
+                      ]
+                    },
+                    "calculatorSaveSupported": {
+                      "type": "boolean"
+                    },
+                    "validationSupported": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "region",
+                    "support",
+                    "calculatorSaveSupported",
+                    "validationSupported",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                },
+                "details": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "serviceId",
+                "kind",
+                "label",
+                "category",
+                "supportive",
+                "region",
+                "environment",
+                "monthlyUsd",
+                "implementationStatus",
+                "role",
+                "required",
+                "rationale",
+                "capability",
+                "details"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "coverage": {
+            "type": "object",
+            "properties": {
+              "exact": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                }
+              },
+              "modeled": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                }
+              },
+              "unavailable": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "amazon-eks",
+                    "amazon-ec2",
+                    "amazon-athena",
+                    "amazon-redshift",
+                    "aws-glue-etl",
+                    "aws-glue-data-catalog",
+                    "aws-glue-crawlers",
+                    "amazon-kinesis-firehose",
+                    "amazon-rds-postgresql",
+                    "amazon-rds-mysql",
+                    "amazon-rds-sqlserver",
+                    "amazon-aurora-postgresql",
+                    "amazon-aurora-mysql",
+                    "amazon-elasticache-redis",
+                    "amazon-vpc-nat",
+                    "application-load-balancer",
+                    "network-load-balancer",
+                    "amazon-s3",
+                    "amazon-efs",
+                    "amazon-ebs",
+                    "amazon-ecs-ec2",
+                    "amazon-cloudfront",
+                    "amazon-lambda",
+                    "amazon-dynamodb",
+                    "amazon-api-gateway-http",
+                    "amazon-route53",
+                    "amazon-sqs",
+                    "amazon-sns",
+                    "amazon-cloudwatch",
+                    "amazon-eventbridge",
+                    "aws-waf-v2",
+                    "amazon-fsx-windows",
+                    "amazon-opensearch",
+                    "amazon-vpc-endpoints",
+                    "amazon-ecs-fargate"
+                  ]
+                }
+              },
+              "calculatorEligible": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exact",
+              "modeled",
+              "unavailable",
+              "calculatorEligible"
+            ],
+            "additionalProperties": false
+          },
+          "calculatorEligible": {
+            "type": "boolean"
+          },
+          "calculatorBlockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "linkPlan": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "blueprintId": {
+                    "type": "string",
+                    "enum": [
+                      "container-platform",
+                      "linux-web-stack",
+                      "windows-app-stack",
+                      "edge-api-platform",
+                      "event-driven-platform",
+                      "data-platform-lite",
+                      "modernization-platform",
+                      "enterprise-data-platform",
+                      "enterprise-data-lake",
+                      "lake-foundation",
+                      "lakehouse-platform",
+                      "streaming-data-platform",
+                      "warehouse-centric-analytics"
+                    ]
+                  },
+                  "patternId": {
+                    "type": "string",
+                    "enum": [
+                      "eks-app-platform",
+                      "eks-api-front-door",
+                      "eks-private-service",
+                      "eks-search-content-platform",
+                      "container-platform.default",
+                      "ec2-web-with-postgres",
+                      "ec2-web-with-cdn",
+                      "ec2-web-with-private-service",
+                      "linux-web-stack.default",
+                      "windows-iis-with-postgres",
+                      "windows-iis-with-sqlserver",
+                      "windows-files-app",
+                      "windows-private-sql-service",
+                      "windows-app-stack.default",
+                      "serverless-edge-api",
+                      "cloudfront-alb-origin-app",
+                      "private-api-front-door",
+                      "edge-api-platform.default",
+                      "async-worker-platform",
+                      "pubsub-fanout-platform",
+                      "event-bus-integration-platform",
+                      "event-driven-platform.default",
+                      "data-platform-lite.default",
+                      "hybrid-transition-state",
+                      "ecs-fargate-target-state",
+                      "modernization-platform.default",
+                      "enterprise-data-platform.default",
+                      "enterprise-data-lake.default",
+                      "lake-foundation-basic",
+                      "lake-foundation-governed",
+                      "lake-foundation.default",
+                      "lakehouse-serving",
+                      "lakehouse-platform.default",
+                      "stream-analytics-platform",
+                      "streaming-data-platform.default",
+                      "redshift-bi-warehouse",
+                      "warehouse-centric-analytics.default"
+                    ]
+                  },
+                  "scenarioId": {
+                    "type": "string"
+                  },
+                  "templateId": {
+                    "type": "string",
+                    "enum": [
+                      "eks-rds-standard",
+                      "linux-heavy",
+                      "windows-heavy",
+                      "edge-api-serverless-standard",
+                      "edge-origin-platform-standard",
+                      "private-api-front-door-standard",
+                      "event-driven-standard",
+                      "modernization-fargate-standard",
+                      "windows-sqlserver-standard",
+                      "windows-files-standard",
+                      "container-api-front-door-standard",
+                      "container-private-service-standard",
+                      "container-search-content-standard",
+                      "linux-web-cdn-standard",
+                      "linux-web-private-standard",
+                      "lake-foundation-standard",
+                      "lakehouse-platform-standard",
+                      "streaming-data-platform-standard",
+                      "warehouse-centric-analytics-standard",
+                      "enterprise-data-lake-standard",
+                      "data-platform-standard",
+                      "enterprise-data-standard"
+                    ]
+                  },
+                  "targetMonthlyUsd": {
+                    "type": "number"
+                  },
+                  "coreTargetMonthlyUsd": {
+                    "type": "number"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "estimateName": {
+                    "type": "string"
+                  },
+                  "notes": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "environmentSplit": {
+                    "type": "object",
+                    "properties": {
+                      "dev": {
+                        "type": "number"
+                      },
+                      "staging": {
+                        "type": "number"
+                      },
+                      "prod": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "dev",
+                      "staging",
+                      "prod"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "operatingSystem": {
+                    "type": "string",
+                    "enum": [
+                      "linux",
+                      "windows"
+                    ]
+                  },
+                  "scenarioPolicy": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "computeCommitment": {
+                        "type": "string",
+                        "enum": [
+                          "on-demand",
+                          "savings-plans",
+                          "reserved",
+                          "reserved-heavy"
+                        ]
+                      },
+                      "computeDiscountPct": {
+                        "type": "number"
+                      },
+                      "databaseCommitment": {
+                        "type": "string",
+                        "enum": [
+                          "on-demand",
+                          "reserved",
+                          "reserved-heavy"
+                        ]
+                      },
+                      "databaseDiscountPct": {
+                        "type": "number"
+                      },
+                      "haPosture": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "targeted-ha",
+                          "selective-ha"
+                        ]
+                      },
+                      "prodMultiAz": {
+                        "type": "boolean"
+                      },
+                      "nonProdMultiAz": {
+                        "type": "boolean"
+                      },
+                      "storageStrategy": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "tuned",
+                          "lean"
+                        ]
+                      },
+                      "storageMultiplier": {
+                        "type": "number"
+                      },
+                      "environmentSizing": {
+                        "type": "string",
+                        "enum": [
+                          "full-footprint",
+                          "right-sized-non-prod",
+                          "lean-non-prod"
+                        ]
+                      },
+                      "environmentScaleFactors": {
+                        "type": "object",
+                        "properties": {
+                          "dev": {
+                            "type": "number"
+                          },
+                          "staging": {
+                            "type": "number"
+                          },
+                          "prod": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "dev",
+                          "staging",
+                          "prod"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "sharedServicesProfile": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "trimmed",
+                          "lean"
+                        ]
+                      },
+                      "sharedServicesMultiplier": {
+                        "type": "number"
+                      },
+                      "dataTransferProfile": {
+                        "type": "string",
+                        "enum": [
+                          "baseline",
+                          "reviewed",
+                          "minimized"
+                        ]
+                      },
+                      "dataTransferMultiplier": {
+                        "type": "number"
+                      },
+                      "justificationProfile": {
+                        "type": "string",
+                        "enum": [
+                          "default-baseline",
+                          "cost-optimized",
+                          "high-optimization"
+                        ]
+                      },
+                      "expectedSavingsPct": {
+                        "type": "number"
+                      },
+                      "coreBudgetFactor": {
+                        "type": "number"
+                      },
+                      "addOnBudgetFactor": {
+                        "type": "number"
+                      },
+                      "strategySummary": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title",
+                      "computeCommitment",
+                      "computeDiscountPct",
+                      "databaseCommitment",
+                      "databaseDiscountPct",
+                      "haPosture",
+                      "prodMultiAz",
+                      "nonProdMultiAz",
+                      "storageStrategy",
+                      "storageMultiplier",
+                      "environmentSizing",
+                      "environmentScaleFactors",
+                      "sharedServicesProfile",
+                      "sharedServicesMultiplier",
+                      "dataTransferProfile",
+                      "dataTransferMultiplier",
+                      "justificationProfile",
+                      "expectedSavingsPct",
+                      "coreBudgetFactor",
+                      "addOnBudgetFactor",
+                      "strategySummary"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "exactAddOns": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "serviceId": {
+                          "type": "string",
+                          "enum": [
+                            "amazon-eks",
+                            "amazon-ec2",
+                            "amazon-athena",
+                            "amazon-redshift",
+                            "aws-glue-etl",
+                            "aws-glue-data-catalog",
+                            "aws-glue-crawlers",
+                            "amazon-kinesis-firehose",
+                            "amazon-rds-postgresql",
+                            "amazon-rds-mysql",
+                            "amazon-rds-sqlserver",
+                            "amazon-aurora-postgresql",
+                            "amazon-aurora-mysql",
+                            "amazon-elasticache-redis",
+                            "amazon-vpc-nat",
+                            "application-load-balancer",
+                            "network-load-balancer",
+                            "amazon-s3",
+                            "amazon-efs",
+                            "amazon-ebs",
+                            "amazon-ecs-ec2",
+                            "amazon-cloudfront",
+                            "amazon-lambda",
+                            "amazon-dynamodb",
+                            "amazon-api-gateway-http",
+                            "amazon-route53",
+                            "amazon-sqs",
+                            "amazon-sns",
+                            "amazon-cloudwatch",
+                            "amazon-eventbridge",
+                            "aws-waf-v2",
+                            "amazon-fsx-windows",
+                            "amazon-opensearch",
+                            "amazon-vpc-endpoints",
+                            "amazon-ecs-fargate"
+                          ]
+                        },
+                        "monthlyBudgetUsd": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "serviceId",
+                        "monthlyBudgetUsd"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "blueprintId",
+                  "patternId",
+                  "scenarioId",
+                  "templateId",
+                  "targetMonthlyUsd",
+                  "region",
+                  "estimateName",
+                  "notes",
+                  "environmentSplit",
+                  "operatingSystem",
+                  "scenarioPolicy",
+                  "exactAddOns"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validation": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "string"
+              },
+              "blueprintId": {
+                "type": "string",
+                "enum": [
+                  "container-platform",
+                  "linux-web-stack",
+                  "windows-app-stack",
+                  "edge-api-platform",
+                  "event-driven-platform",
+                  "data-platform-lite",
+                  "modernization-platform",
+                  "enterprise-data-platform",
+                  "enterprise-data-lake",
+                  "lake-foundation",
+                  "lakehouse-platform",
+                  "streaming-data-platform",
+                  "warehouse-centric-analytics"
+                ]
+              },
+              "blueprintTitle": {
+                "type": "string"
+              },
+              "templateId": {
+                "type": "string",
+                "enum": [
+                  "eks-rds-standard",
+                  "linux-heavy",
+                  "windows-heavy",
+                  "edge-api-serverless-standard",
+                  "edge-origin-platform-standard",
+                  "private-api-front-door-standard",
+                  "event-driven-standard",
+                  "modernization-fargate-standard",
+                  "windows-sqlserver-standard",
+                  "windows-files-standard",
+                  "container-api-front-door-standard",
+                  "container-private-service-standard",
+                  "container-search-content-standard",
+                  "linux-web-cdn-standard",
+                  "linux-web-private-standard",
+                  "lake-foundation-standard",
+                  "lakehouse-platform-standard",
+                  "streaming-data-platform-standard",
+                  "warehouse-centric-analytics-standard",
+                  "enterprise-data-lake-standard",
+                  "data-platform-standard",
+                  "enterprise-data-standard"
+                ]
+              },
+              "templateTitle": {
+                "type": "string"
+              },
+              "expectedMonthlyUsd": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "storedMonthlyUsd": {
+                "type": "number"
+              },
+              "modeledMonthlyUsd": {
+                "type": "number"
+              },
+              "expectedRegion": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "regions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "serviceCodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "pack": {
+                      "type": "string",
+                      "enum": [
+                        "pricing-integrity",
+                        "architecture-completeness",
+                        "funding-readiness",
+                        "platform-governance"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "enum": [
+                        "pricing.services-present",
+                        "pricing.known-service-formulas",
+                        "pricing.saved-modeled-parity",
+                        "pricing.total-parity",
+                        "pricing.group-subtotal-parity",
+                        "pricing.scenario-target-positive",
+                        "pricing.scenario-services-present",
+                        "pricing.region-service-coverage",
+                        "pricing.core-preview-valid",
+                        "architecture.single-region",
+                        "architecture.expected-region",
+                        "architecture.required-service-codes",
+                        "architecture.required-service-families",
+                        "architecture.environment-coverage",
+                        "architecture.compute-os",
+                        "architecture.required-blueprint-services",
+                        "architecture.required-capabilities",
+                        "architecture.forbidden-service-mix",
+                        "architecture.pattern-fit-gaps",
+                        "architecture.required-unpriced-capabilities",
+                        "architecture.environment-model",
+                        "architecture.calculator-backed-services",
+                        "funding.supportive-spend-threshold",
+                        "funding.primary-spend-dominant",
+                        "funding.primary-architecture-dominance",
+                        "funding.target-band-fit",
+                        "funding.architecture-budget-fit",
+                        "funding.modeled-service-gaps",
+                        "funding.calculator-link-ready",
+                        "governance.non-default-region-justification",
+                        "governance.edge-security-controls",
+                        "governance.operational-visibility",
+                        "governance.premium-managed-service-justification"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pass",
+                        "warning",
+                        "fail"
+                      ]
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "info",
+                        "warning",
+                        "error"
+                      ]
+                    },
+                    "blocking": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "remediation": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "pack",
+                    "id",
+                    "title",
+                    "status",
+                    "severity",
+                    "blocking",
+                    "reason",
+                    "remediation",
+                    "details"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "packs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "enum": [
+                        "pricing-integrity",
+                        "architecture-completeness",
+                        "funding-readiness",
+                        "platform-governance"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "passed": {
+                      "type": "boolean"
+                    },
+                    "blocking": {
+                      "type": "boolean"
+                    },
+                    "failedRuleCount": {
+                      "type": "number"
+                    },
+                    "warningRuleCount": {
+                      "type": "number"
+                    },
+                    "checks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "pack": {
+                            "type": "string",
+                            "enum": [
+                              "pricing-integrity",
+                              "architecture-completeness",
+                              "funding-readiness",
+                              "platform-governance"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "pricing.services-present",
+                              "pricing.known-service-formulas",
+                              "pricing.saved-modeled-parity",
+                              "pricing.total-parity",
+                              "pricing.group-subtotal-parity",
+                              "pricing.scenario-target-positive",
+                              "pricing.scenario-services-present",
+                              "pricing.region-service-coverage",
+                              "pricing.core-preview-valid",
+                              "architecture.single-region",
+                              "architecture.expected-region",
+                              "architecture.required-service-codes",
+                              "architecture.required-service-families",
+                              "architecture.environment-coverage",
+                              "architecture.compute-os",
+                              "architecture.required-blueprint-services",
+                              "architecture.required-capabilities",
+                              "architecture.forbidden-service-mix",
+                              "architecture.pattern-fit-gaps",
+                              "architecture.required-unpriced-capabilities",
+                              "architecture.environment-model",
+                              "architecture.calculator-backed-services",
+                              "funding.supportive-spend-threshold",
+                              "funding.primary-spend-dominant",
+                              "funding.primary-architecture-dominance",
+                              "funding.target-band-fit",
+                              "funding.architecture-budget-fit",
+                              "funding.modeled-service-gaps",
+                              "funding.calculator-link-ready",
+                              "governance.non-default-region-justification",
+                              "governance.edge-security-controls",
+                              "governance.operational-visibility",
+                              "governance.premium-managed-service-justification"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pass",
+                              "warning",
+                              "fail"
+                            ]
+                          },
+                          "severity": {
+                            "type": "string",
+                            "enum": [
+                              "info",
+                              "warning",
+                              "error"
+                            ]
+                          },
+                          "blocking": {
+                            "type": "boolean"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "remediation": {
+                            "type": "string"
+                          },
+                          "details": {
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind"
+                                ],
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "pack",
+                          "id",
+                          "title",
+                          "status",
+                          "severity",
+                          "blocking",
+                          "reason",
+                          "remediation",
+                          "details"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "passed",
+                    "blocking",
+                    "failedRuleCount",
+                    "warningRuleCount",
+                    "checks"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "blockingFailures": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "enum": [
+                        "pricing.services-present",
+                        "pricing.known-service-formulas",
+                        "pricing.saved-modeled-parity",
+                        "pricing.total-parity",
+                        "pricing.group-subtotal-parity",
+                        "pricing.scenario-target-positive",
+                        "pricing.scenario-services-present",
+                        "pricing.region-service-coverage",
+                        "pricing.core-preview-valid",
+                        "architecture.single-region",
+                        "architecture.expected-region",
+                        "architecture.required-service-codes",
+                        "architecture.required-service-families",
+                        "architecture.environment-coverage",
+                        "architecture.compute-os",
+                        "architecture.required-blueprint-services",
+                        "architecture.required-capabilities",
+                        "architecture.forbidden-service-mix",
+                        "architecture.pattern-fit-gaps",
+                        "architecture.required-unpriced-capabilities",
+                        "architecture.environment-model",
+                        "architecture.calculator-backed-services",
+                        "funding.supportive-spend-threshold",
+                        "funding.primary-spend-dominant",
+                        "funding.primary-architecture-dominance",
+                        "funding.target-band-fit",
+                        "funding.architecture-budget-fit",
+                        "funding.modeled-service-gaps",
+                        "funding.calculator-link-ready",
+                        "governance.non-default-region-justification",
+                        "governance.edge-security-controls",
+                        "governance.operational-visibility",
+                        "governance.premium-managed-service-justification"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "string"
+                    },
+                    "remediation": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "details",
+                    "remediation"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "warningRules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "enum": [
+                        "pricing.services-present",
+                        "pricing.known-service-formulas",
+                        "pricing.saved-modeled-parity",
+                        "pricing.total-parity",
+                        "pricing.group-subtotal-parity",
+                        "pricing.scenario-target-positive",
+                        "pricing.scenario-services-present",
+                        "pricing.region-service-coverage",
+                        "pricing.core-preview-valid",
+                        "architecture.single-region",
+                        "architecture.expected-region",
+                        "architecture.required-service-codes",
+                        "architecture.required-service-families",
+                        "architecture.environment-coverage",
+                        "architecture.compute-os",
+                        "architecture.required-blueprint-services",
+                        "architecture.required-capabilities",
+                        "architecture.forbidden-service-mix",
+                        "architecture.pattern-fit-gaps",
+                        "architecture.required-unpriced-capabilities",
+                        "architecture.environment-model",
+                        "architecture.calculator-backed-services",
+                        "funding.supportive-spend-threshold",
+                        "funding.primary-spend-dominant",
+                        "funding.primary-architecture-dominance",
+                        "funding.target-band-fit",
+                        "funding.architecture-budget-fit",
+                        "funding.modeled-service-gaps",
+                        "funding.calculator-link-ready",
+                        "governance.non-default-region-justification",
+                        "governance.edge-security-controls",
+                        "governance.operational-visibility",
+                        "governance.premium-managed-service-justification"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "string"
+                    },
+                    "remediation": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "details",
+                    "remediation"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "hardFailures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "assumptions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "parityDetails": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "serviceId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "amazon-eks",
+                            "amazon-ec2",
+                            "amazon-athena",
+                            "amazon-redshift",
+                            "aws-glue-etl",
+                            "aws-glue-data-catalog",
+                            "aws-glue-crawlers",
+                            "amazon-kinesis-firehose",
+                            "amazon-rds-postgresql",
+                            "amazon-rds-mysql",
+                            "amazon-rds-sqlserver",
+                            "amazon-aurora-postgresql",
+                            "amazon-aurora-mysql",
+                            "amazon-elasticache-redis",
+                            "amazon-vpc-nat",
+                            "application-load-balancer",
+                            "network-load-balancer",
+                            "amazon-s3",
+                            "amazon-efs",
+                            "amazon-ebs",
+                            "amazon-ecs-ec2",
+                            "amazon-cloudfront",
+                            "amazon-lambda",
+                            "amazon-dynamodb",
+                            "amazon-api-gateway-http",
+                            "amazon-route53",
+                            "amazon-sqs",
+                            "amazon-sns",
+                            "amazon-cloudwatch",
+                            "amazon-eventbridge",
+                            "aws-waf-v2",
+                            "amazon-fsx-windows",
+                            "amazon-opensearch",
+                            "amazon-vpc-endpoints",
+                            "amazon-ecs-fargate"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "serviceCode": {
+                      "type": "string"
+                    },
+                    "region": {
+                      "type": "string"
+                    },
+                    "storedMonthlyUsd": {
+                      "type": "number"
+                    },
+                    "modeledMonthlyUsd": {
+                      "type": "number"
+                    },
+                    "deltaUsd": {
+                      "type": "number"
+                    },
+                    "supported": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "serviceId",
+                    "serviceCode",
+                    "region",
+                    "storedMonthlyUsd",
+                    "modeledMonthlyUsd",
+                    "deltaUsd",
+                    "supported",
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "passed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "checks",
+              "packs",
+              "blockingFailures",
+              "warningRules",
+              "hardFailures",
+              "warnings",
+              "assumptions",
+              "parityDetails",
+              "passed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "referenceMonthlyUsd",
+          "targetMonthlyUsd",
+          "modeledMonthlyUsd",
+          "expectedSavingsPct",
+          "strategySummary",
+          "deltaDrivers",
+          "scenarioPolicy",
+          "budgetFit",
+          "pricingConfidence",
+          "serviceBreakdown",
+          "coverage",
+          "calculatorEligible",
+          "calculatorBlockers",
+          "linkPlan",
+          "validation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "comparisonSummary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "modeledMonthlyUsd": {
+            "type": "number"
+          },
+          "deltaVsBaselineUsd": {
+            "type": "number"
+          },
+          "deltaVsBaselinePct": {
+            "type": "number"
+          },
+          "calculatorEligible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "scenarioId",
+          "title",
+          "modeledMonthlyUsd",
+          "deltaVsBaselineUsd",
+          "deltaVsBaselinePct",
+          "calculatorEligible"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "recommendedScenarioId": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "architecture",
+    "scenarios",
+    "comparisonSummary",
+    "recommendedScenarioId",
+    "blockers",
+    "warnings",
+    "assumptions"
+  ],
+  "additionalProperties": false
+}

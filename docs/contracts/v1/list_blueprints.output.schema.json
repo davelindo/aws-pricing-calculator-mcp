@@ -1,0 +1,277 @@
+{
+  "$id": "aws-pricing-calculator-mcp.contract.v1.tools.list_blueprints.output",
+  "title": "list_blueprints output",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "blueprints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "container-platform",
+              "linux-web-stack",
+              "windows-app-stack",
+              "edge-api-platform",
+              "event-driven-platform",
+              "data-platform-lite",
+              "modernization-platform",
+              "enterprise-data-platform",
+              "enterprise-data-lake",
+              "lake-foundation",
+              "lakehouse-platform",
+              "streaming-data-platform",
+              "warehouse-centric-analytics"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "architectureFamily": {
+            "type": "string"
+          },
+          "architectureSubtype": {
+            "type": "string"
+          },
+          "environmentModel": {
+            "type": "string"
+          },
+          "defaultOperatingSystem": {
+            "type": "string",
+            "enum": [
+              "linux",
+              "windows"
+            ]
+          },
+          "requiredCapabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "budgetGuidance": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "minimumMonthlyUsd": {
+                    "type": "number"
+                  },
+                  "preferredMinMonthlyUsd": {
+                    "type": "number"
+                  },
+                  "preferredMaxMonthlyUsd": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "packIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "packs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "requiredServiceFamilies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiredServiceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "amazon-eks",
+                "amazon-ec2",
+                "amazon-athena",
+                "amazon-redshift",
+                "aws-glue-etl",
+                "aws-glue-data-catalog",
+                "aws-glue-crawlers",
+                "amazon-kinesis-firehose",
+                "amazon-rds-postgresql",
+                "amazon-rds-mysql",
+                "amazon-rds-sqlserver",
+                "amazon-aurora-postgresql",
+                "amazon-aurora-mysql",
+                "amazon-elasticache-redis",
+                "amazon-vpc-nat",
+                "application-load-balancer",
+                "network-load-balancer",
+                "amazon-s3",
+                "amazon-efs",
+                "amazon-ebs",
+                "amazon-ecs-ec2",
+                "amazon-cloudfront",
+                "amazon-lambda",
+                "amazon-dynamodb",
+                "amazon-api-gateway-http",
+                "amazon-route53",
+                "amazon-sqs",
+                "amazon-sns",
+                "amazon-cloudwatch",
+                "amazon-eventbridge",
+                "aws-waf-v2",
+                "amazon-fsx-windows",
+                "amazon-opensearch",
+                "amazon-vpc-endpoints",
+                "amazon-ecs-fargate"
+              ]
+            }
+          },
+          "defaultAddOnServiceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "amazon-eks",
+                "amazon-ec2",
+                "amazon-athena",
+                "amazon-redshift",
+                "aws-glue-etl",
+                "aws-glue-data-catalog",
+                "aws-glue-crawlers",
+                "amazon-kinesis-firehose",
+                "amazon-rds-postgresql",
+                "amazon-rds-mysql",
+                "amazon-rds-sqlserver",
+                "amazon-aurora-postgresql",
+                "amazon-aurora-mysql",
+                "amazon-elasticache-redis",
+                "amazon-vpc-nat",
+                "application-load-balancer",
+                "network-load-balancer",
+                "amazon-s3",
+                "amazon-efs",
+                "amazon-ebs",
+                "amazon-ecs-ec2",
+                "amazon-cloudfront",
+                "amazon-lambda",
+                "amazon-dynamodb",
+                "amazon-api-gateway-http",
+                "amazon-route53",
+                "amazon-sqs",
+                "amazon-sns",
+                "amazon-cloudwatch",
+                "amazon-eventbridge",
+                "aws-waf-v2",
+                "amazon-fsx-windows",
+                "amazon-opensearch",
+                "amazon-vpc-endpoints",
+                "amazon-ecs-fargate"
+              ]
+            }
+          },
+          "optionalServiceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "amazon-eks",
+                "amazon-ec2",
+                "amazon-athena",
+                "amazon-redshift",
+                "aws-glue-etl",
+                "aws-glue-data-catalog",
+                "aws-glue-crawlers",
+                "amazon-kinesis-firehose",
+                "amazon-rds-postgresql",
+                "amazon-rds-mysql",
+                "amazon-rds-sqlserver",
+                "amazon-aurora-postgresql",
+                "amazon-aurora-mysql",
+                "amazon-elasticache-redis",
+                "amazon-vpc-nat",
+                "application-load-balancer",
+                "network-load-balancer",
+                "amazon-s3",
+                "amazon-efs",
+                "amazon-ebs",
+                "amazon-ecs-ec2",
+                "amazon-cloudfront",
+                "amazon-lambda",
+                "amazon-dynamodb",
+                "amazon-api-gateway-http",
+                "amazon-route53",
+                "amazon-sqs",
+                "amazon-sns",
+                "amazon-cloudwatch",
+                "amazon-eventbridge",
+                "aws-waf-v2",
+                "amazon-fsx-windows",
+                "amazon-opensearch",
+                "amazon-vpc-endpoints",
+                "amazon-ecs-fargate"
+              ]
+            }
+          },
+          "supportedRegions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "architectureFamily",
+          "architectureSubtype",
+          "environmentModel",
+          "defaultOperatingSystem",
+          "requiredCapabilities",
+          "budgetGuidance",
+          "packIds",
+          "packs",
+          "requiredServiceFamilies",
+          "requiredServiceIds",
+          "defaultAddOnServiceIds",
+          "optionalServiceIds",
+          "supportedRegions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "blueprints"
+  ],
+  "additionalProperties": false
+}

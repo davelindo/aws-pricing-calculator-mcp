@@ -1,0 +1,45 @@
+{
+  "$id": "aws-pricing-calculator-mcp.contract.v1.tools.validate_calculator_link.input",
+  "title": "validate_calculator_link input",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "shareLinkOrEstimateId": {
+      "type": "string"
+    },
+    "blueprintId": {
+      "type": "string",
+      "enum": [
+        "container-platform",
+        "linux-web-stack",
+        "windows-app-stack",
+        "edge-api-platform",
+        "event-driven-platform",
+        "data-platform-lite",
+        "modernization-platform",
+        "enterprise-data-platform",
+        "enterprise-data-lake",
+        "lake-foundation",
+        "lakehouse-platform",
+        "streaming-data-platform",
+        "warehouse-centric-analytics"
+      ]
+    },
+    "expectedMonthlyUsd": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "expectedRegion": {
+      "type": "string"
+    },
+    "budgetTolerancePct": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1
+    }
+  },
+  "required": [
+    "shareLinkOrEstimateId"
+  ],
+  "additionalProperties": false
+}

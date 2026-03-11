@@ -1,0 +1,158 @@
+{
+  "$id": "aws-pricing-calculator-mcp.contract.v1.tools.list_service_catalog.output",
+  "title": "list_service_catalog output",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "amazon-eks",
+              "amazon-ec2",
+              "amazon-athena",
+              "amazon-redshift",
+              "aws-glue-etl",
+              "aws-glue-data-catalog",
+              "aws-glue-crawlers",
+              "amazon-kinesis-firehose",
+              "amazon-rds-postgresql",
+              "amazon-rds-mysql",
+              "amazon-rds-sqlserver",
+              "amazon-aurora-postgresql",
+              "amazon-aurora-mysql",
+              "amazon-elasticache-redis",
+              "amazon-vpc-nat",
+              "application-load-balancer",
+              "network-load-balancer",
+              "amazon-s3",
+              "amazon-efs",
+              "amazon-ebs",
+              "amazon-ecs-ec2",
+              "amazon-cloudfront",
+              "amazon-lambda",
+              "amazon-dynamodb",
+              "amazon-api-gateway-http",
+              "amazon-route53",
+              "amazon-sqs",
+              "amazon-sns",
+              "amazon-cloudwatch",
+              "amazon-eventbridge",
+              "aws-waf-v2",
+              "amazon-fsx-windows",
+              "amazon-opensearch",
+              "amazon-vpc-endpoints",
+              "amazon-ecs-fargate"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "compute",
+              "analytics",
+              "integration",
+              "metadata",
+              "database",
+              "networking",
+              "storage",
+              "edge",
+              "operations",
+              "security"
+            ]
+          },
+          "implementationStatus": {
+            "type": "string",
+            "enum": [
+              "implemented",
+              "modeled",
+              "planned"
+            ]
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pricingStrategies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "calculatorServiceCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "capabilityMatrix": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "region": {
+                  "type": "string"
+                },
+                "support": {
+                  "type": "string",
+                  "enum": [
+                    "exact",
+                    "modeled",
+                    "unavailable"
+                  ]
+                },
+                "calculatorSaveSupported": {
+                  "type": "boolean"
+                },
+                "validationSupported": {
+                  "type": "boolean"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "region",
+                "support",
+                "calculatorSaveSupported",
+                "validationSupported",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "supportedRegions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "category",
+          "implementationStatus",
+          "keywords",
+          "pricingStrategies",
+          "calculatorServiceCodes",
+          "capabilityMatrix",
+          "supportedRegions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "services"
+  ],
+  "additionalProperties": false
+}

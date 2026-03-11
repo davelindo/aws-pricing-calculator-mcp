@@ -1,0 +1,65 @@
+{
+  "$id": "aws-pricing-calculator-mcp.contract.v1.tool-error",
+  "title": "tool error",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "v1"
+    },
+    "tool": {
+      "type": "string",
+      "enum": [
+        "list_blueprints",
+        "list_service_catalog",
+        "design_architecture",
+        "price_architecture",
+        "create_calculator_link",
+        "validate_calculator_link"
+      ]
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "invalid_input",
+        "not_found",
+        "not_calculator_eligible",
+        "unsupported_region",
+        "unsupported_service_combination",
+        "validation_failed",
+        "upstream_aws_error",
+        "internal_error"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "hint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "details": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "contractVersion",
+    "tool",
+    "code",
+    "message",
+    "hint",
+    "details"
+  ],
+  "additionalProperties": false
+}

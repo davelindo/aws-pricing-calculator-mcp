@@ -11,6 +11,7 @@
   "scripts": {
     "start": "node ./bin/aws-pricing-calculator-mcp.js",
     "lint": "node ./scripts/lint.mjs",
+    "contracts:generate": "node ./scripts/generate-contracts.mjs",
     "test": "node --test",
     "test:live": "AWS_CALCULATOR_LIVE=1 node --test test/live-roundtrip.test.js",
     "check": "npm run lint && npm test",
