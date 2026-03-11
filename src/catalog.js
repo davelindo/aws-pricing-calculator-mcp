@@ -928,7 +928,7 @@ const BLUEPRINTS = {
     title: "Edge API Platform",
     description:
       "API-first platform with edge delivery, serverless components, managed data, and core VPC services.",
-    templateId: "linux-heavy",
+    templateId: "edge-api-serverless-standard",
     architectureFamily: "edge-platform",
     architectureSubtype: "edge-api-platform",
     defaultOperatingSystem: "linux",
@@ -996,7 +996,7 @@ const BLUEPRINTS = {
     title: "Event-Driven Platform",
     description:
       "Application stack with asynchronous messaging, Lambda workers, and managed data services.",
-    templateId: "linux-heavy",
+    templateId: "event-driven-standard",
     architectureFamily: "integration-platform",
     architectureSubtype: "event-driven-platform",
     defaultOperatingSystem: "linux",
@@ -1089,7 +1089,7 @@ const BLUEPRINTS = {
     title: "Modernization Platform",
     description:
       "Modernization-oriented application platform with ECS/Fargate, managed networking, and shared platform services.",
-    templateId: "linux-heavy",
+    templateId: "modernization-fargate-standard",
     architectureFamily: "application-platform",
     architectureSubtype: "modernization-platform",
     defaultOperatingSystem: "linux",

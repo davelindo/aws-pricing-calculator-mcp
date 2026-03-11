@@ -27,6 +27,10 @@ export const BUDGET_FIT_STATUS_VALUES = [
 ];
 export const SOURCE_TYPE_VALUES = ["brief", "hybrid", "blueprint"];
 export const OPERATING_SYSTEM_VALUES = ["linux", "windows"];
+export const REGION_MODE_VALUES = ["single-region", "multi-region"];
+export const SERVICE_SELECTION_MODE_VALUES = ["strict", "augment"];
+export const VALIDATION_MODE_VALUES = ["generic", "intent-aware"];
+export const VALIDATION_CONTEXT_SOURCE_VALUES = ["explicit", "link-plan", "inferred", "none"];
 export const VALIDATION_STATUS_VALUES = ["pass", "warning", "fail"];
 export const VALIDATION_SEVERITY_VALUES = ["info", "warning", "error"];
 export const VALIDATION_PACK_IDS = [
@@ -161,6 +165,19 @@ export const sourceTypeEnum = enumFromValues(SOURCE_TYPE_VALUES, "sourceType");
 export const operatingSystemEnum = enumFromValues(
   OPERATING_SYSTEM_VALUES,
   "operatingSystem",
+);
+export const regionModeEnum = enumFromValues(REGION_MODE_VALUES, "regionMode");
+export const serviceSelectionModeEnum = enumFromValues(
+  SERVICE_SELECTION_MODE_VALUES,
+  "serviceSelectionMode",
+);
+export const validationModeEnum = enumFromValues(
+  VALIDATION_MODE_VALUES,
+  "validationMode",
+);
+export const validationContextSourceEnum = enumFromValues(
+  VALIDATION_CONTEXT_SOURCE_VALUES,
+  "validationContextSource",
 );
 export const validationStatusEnum = enumFromValues(
   VALIDATION_STATUS_VALUES,
@@ -463,14 +480,20 @@ const parityDetailSchema = z.object({
 });
 const validationSummarySchema = z.object({
   schemaVersion: z.string(),
+  validationMode: validationModeEnum.optional(),
+  contextSource: validationContextSourceEnum.optional(),
   blueprintId: blueprintIdEnum.optional(),
   blueprintTitle: z.string().optional(),
   templateId: templateIdEnum.optional(),
   templateTitle: z.string().optional(),
+  bestMatchBlueprintId: blueprintIdEnum.nullable().optional(),
+  bestMatchBlueprintTitle: z.string().nullable().optional(),
+  patternId: patternIdEnum.optional(),
   expectedMonthlyUsd: z.number().nullable().optional(),
   storedMonthlyUsd: z.number().optional(),
   modeledMonthlyUsd: z.number().optional(),
   expectedRegion: z.string().nullable().optional(),
+  expectedRegionMode: regionModeEnum.nullable().optional(),
   regions: z.array(z.string()).optional(),
   serviceCodes: z.array(z.string()).optional(),
   checks: z.array(validationCheckSchema),
@@ -551,10 +574,12 @@ const architectureSchema = z.object({
   estimateName: z.string(),
   notes: z.string().nullable(),
   region: z.string(),
+  regionMode: regionModeEnum,
   operatingSystem: operatingSystemEnum,
   targetMonthlyUsd: z.number().nullable(),
   environmentSplit: normalizedEnvironmentSplitSchema,
   includeDefaultAddOns: z.boolean(),
+  serviceSelectionMode: serviceSelectionModeEnum,
   selectedServices: z.array(selectedServiceSchema),
   serviceCoverage: serviceCoverageSchema,
   hardConstraints: hardConstraintSchema,
@@ -704,6 +729,7 @@ export const designArchitectureInputSchema = z.object({
   operatingSystem: operatingSystemEnum.optional(),
   environmentSplit: environmentSplitSchema.optional(),
   includeDefaultAddOns: z.boolean().optional(),
+  serviceSelectionMode: serviceSelectionModeEnum.optional(),
   serviceIds: z.array(serviceIdEnum).optional(),
   scenarioPolicies: z.array(scenarioPolicySchema.partial()).optional(),
 });
@@ -719,6 +745,7 @@ export const priceArchitectureInputSchema = z.object({
   operatingSystem: operatingSystemEnum.optional(),
   environmentSplit: environmentSplitSchema.optional(),
   includeDefaultAddOns: z.boolean().optional(),
+  serviceSelectionMode: serviceSelectionModeEnum.optional(),
   serviceIds: z.array(serviceIdEnum).optional(),
   scenarioPolicies: z.array(scenarioPolicySchema.partial()).optional(),
 });
@@ -728,8 +755,11 @@ export const createCalculatorLinkInputSchema = z.object({
 export const validateCalculatorLinkInputSchema = z.object({
   shareLinkOrEstimateId: z.string(),
   blueprintId: blueprintIdEnum.optional(),
+  patternId: patternIdEnum.optional(),
   expectedMonthlyUsd: z.number().positive().optional(),
   expectedRegion: z.string().optional(),
+  expectedRegionMode: regionModeEnum.optional(),
+  validationMode: validationModeEnum.optional(),
   budgetTolerancePct: z.number().positive().max(1).optional(),
 });
 
@@ -828,6 +858,10 @@ export function createContractManifest() {
       budgetFitStatus: BUDGET_FIT_STATUS_VALUES,
       sourceType: SOURCE_TYPE_VALUES,
       operatingSystem: OPERATING_SYSTEM_VALUES,
+      regionMode: REGION_MODE_VALUES,
+      serviceSelectionMode: SERVICE_SELECTION_MODE_VALUES,
+      validationMode: VALIDATION_MODE_VALUES,
+      validationContextSource: VALIDATION_CONTEXT_SOURCE_VALUES,
       validationStatus: VALIDATION_STATUS_VALUES,
       validationSeverity: VALIDATION_SEVERITY_VALUES,
       validationPackIds: VALIDATION_PACK_IDS,

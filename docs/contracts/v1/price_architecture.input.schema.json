@@ -883,6 +883,13 @@
         "region": {
           "type": "string"
         },
+        "regionMode": {
+          "type": "string",
+          "enum": [
+            "single-region",
+            "multi-region"
+          ]
+        },
         "operatingSystem": {
           "type": "string",
           "enum": [
@@ -922,6 +929,13 @@
         },
         "includeDefaultAddOns": {
           "type": "boolean"
+        },
+        "serviceSelectionMode": {
+          "type": "string",
+          "enum": [
+            "strict",
+            "augment"
+          ]
         },
         "selectedServices": {
           "type": "array",
@@ -1815,10 +1829,12 @@
         "estimateName",
         "notes",
         "region",
+        "regionMode",
         "operatingSystem",
         "targetMonthlyUsd",
         "environmentSplit",
         "includeDefaultAddOns",
+        "serviceSelectionMode",
         "selectedServices",
         "serviceCoverage",
         "hardConstraints",
@@ -1902,6 +1918,13 @@
     },
     "includeDefaultAddOns": {
       "type": "boolean"
+    },
+    "serviceSelectionMode": {
+      "type": "string",
+      "enum": [
+        "strict",
+        "augment"
+      ]
     },
     "serviceIds": {
       "type": "array",

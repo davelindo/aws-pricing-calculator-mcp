@@ -6,11 +6,7 @@ import {
   designArchitecture,
   priceArchitecture,
 } from "../src/planner.js";
-import {
-  NON_DEFAULT_REGION_GOVERNANCE_FAILURE_ID,
-  ROADMAP_REGIONS,
-  getScenario,
-} from "../test-support/helpers.js";
+import { ROADMAP_REGIONS, getScenario } from "../test-support/helpers.js";
 
 const BLUEPRINT_TARGETS = {
   "container-platform": 7000,
@@ -89,23 +85,6 @@ test("buildCalculatorEstimateFromScenario builds exact baseline estimates outsid
       ],
       serviceIds: ["amazon-kinesis-firehose"],
     },
-    {
-      blueprintId: "streaming-data-platform",
-      region: "ca-central-1",
-      targetMonthlyUsd: 22000,
-      requiredCodes: [
-        "amazonS3",
-        "amazonKinesisFirehose",
-        "amazonAthena",
-        "awsEtlJobsAndDevelopmentEndpoints",
-        "awsGlueDataCatalogStorageRequests",
-        "awsPrivateLinkVpc",
-      ],
-      serviceIds: [
-        "amazon-vpc-endpoints",
-        "aws-glue-crawlers",
-      ],
-    },
   ];
 
   for (const testCase of cases) {
@@ -124,20 +103,10 @@ test("buildCalculatorEstimateFromScenario builds exact baseline estimates outsid
       `${testCase.blueprintId} in ${testCase.region} should be calculator-eligible`,
     );
     assert.ok(built.validation.parityDetails.length > 0, `${testCase.blueprintId} parity details`);
-    assert.ok(
-      built.validation.blockingFailures.every(
-        (failure) => failure.id === NON_DEFAULT_REGION_GOVERNANCE_FAILURE_ID,
-      ),
-      `${testCase.blueprintId} in ${testCase.region} should only fail governance justification`,
-    );
-    assert.ok(
-      built.validation.checks.every(
-        (check) =>
-          !check.blocking ||
-          check.status === "pass" ||
-          check.id === NON_DEFAULT_REGION_GOVERNANCE_FAILURE_ID,
-      ),
-      `${testCase.blueprintId} in ${testCase.region} should keep blocking checks limited to region justification`,
+    assert.equal(
+      built.validation.blockingFailures.length,
+      0,
+      `${testCase.blueprintId} in ${testCase.region} should validate without blocking failures`,
     );
     assert.ok(
       services.every((service) => service.region === testCase.region),
@@ -151,6 +120,26 @@ test("buildCalculatorEstimateFromScenario builds exact baseline estimates outsid
       );
     }
   }
+});
+
+test("buildCalculatorEstimateFromScenario refuses streaming architectures with unresolved stream-processing gaps", () => {
+  const priced = priceArchitecture({
+    blueprintId: "streaming-data-platform",
+    region: "ca-central-1",
+    targetMonthlyUsd: 22000,
+    serviceIds: ["amazon-vpc-endpoints", "aws-glue-crawlers"],
+  });
+  const baseline = getScenario(priced);
+
+  assert.equal(baseline.calculatorEligible, false);
+  assert.ok(
+    baseline.calculatorBlockers.some((blocker) => blocker.includes("stream-processing-engine")),
+  );
+  assert.throws(() =>
+    buildCalculatorEstimateFromScenario({
+      pricedScenario: baseline,
+    }),
+  );
 });
 
 test("buildCalculatorEstimateFromScenario includes promoted windows add-ons in the saved estimate shape", () => {

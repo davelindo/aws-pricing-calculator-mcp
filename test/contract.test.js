@@ -126,6 +126,8 @@ test("design_architecture returns the canonical v1 shape without leaked internal
   assert.equal("sharedServicesSpendFactor" in policy, false);
   assert.equal("dataTransferFactor" in policy, false);
   assert.equal(architecture.inference.blueprint.value, architecture.blueprintId);
+  assert.equal(architecture.regionMode, "single-region");
+  assert.ok(["strict", "augment"].includes(architecture.serviceSelectionMode));
 });
 
 test("price_architecture returns canonical v1 scenarios without leaked internal fields", async (t) => {
@@ -150,4 +152,23 @@ test("price_architecture returns canonical v1 scenarios without leaked internal 
   assert.equal("dataTransferFactor" in scenario.scenarioPolicy, false);
   assert.ok(Array.isArray(priced.architecture.fitGaps));
   assert.ok(Array.isArray(priced.architecture.requiredUnpricedCapabilities));
+  assert.ok(
+    scenario.validation.checks.every(
+      (check) =>
+        check.status !== "pass" ||
+        check.id === "architecture.required-blueprint-services" ||
+        check.id === "funding.calculator-link-ready",
+    ),
+  );
+  assert.ok(
+    scenario.validation.packs.every((pack) =>
+      pack.checks.every(
+        (check) =>
+          check.status !== "pass" ||
+          check.id === "architecture.required-blueprint-services" ||
+          check.id === "funding.calculator-link-ready",
+      ),
+    ),
+  );
+  assert.deepEqual(scenario.validation.parityDetails, []);
 });

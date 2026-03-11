@@ -47,7 +47,10 @@ const PREMIUM_SERVICE_IDS = new Set([
   "amazon-opensearch",
   "amazon-fsx-windows",
 ]);
-const JUSTIFICATION_SIGNAL = /(regulat|residency|sovereign|compliance|latency|security|incident|license|migration|moderni)/i;
+const REGION_JUSTIFICATION_SIGNAL =
+  /(regulat|residency|sovereign|compliance|latency|country|local|regional|brazil|sao paulo)/i;
+const PREMIUM_JUSTIFICATION_SIGNAL =
+  /(license|migration|moderni|managed|search|sql server|aurora|windows|performance|operational|availability)/i;
 
 function inferTemplateIdFromServices(services) {
   const serviceCodes = serviceCodesFor(services);
@@ -341,19 +344,20 @@ function serviceDefinitionsForSavedEstimate(services) {
     .filter(Boolean);
 }
 
-function serviceFamiliesForSavedEstimate(services) {
-  return [...new Set(serviceDefinitionsForSavedEstimate(services).map((service) => service.category))];
+function hasExplicitValidationContext(contextSource) {
+  return contextSource === "explicit" || contextSource === "link-plan";
 }
 
-function estimateTextCorpus(estimate, services) {
-  return [
-    estimate?.name ?? "",
-    ...serviceEntries(services).map((service) => service.description ?? ""),
-  ].join(" ");
+function userAuthoredValidationText(estimate, userAuthoredText) {
+  return [String(userAuthoredText ?? ""), String(estimate?.name ?? "")].join(" ").trim();
 }
 
-function hasJustification(text) {
-  return JUSTIFICATION_SIGNAL.test(String(text ?? ""));
+function hasRegionJustification(text) {
+  return REGION_JUSTIFICATION_SIGNAL.test(String(text ?? ""));
+}
+
+function hasPremiumJustification(text) {
+  return PREMIUM_JUSTIFICATION_SIGNAL.test(String(text ?? ""));
 }
 
 function buildSavedEstimateChecks({
@@ -364,29 +368,42 @@ function buildSavedEstimateChecks({
   expectedMonthlyUsd,
   expectedRegion,
   budgetTolerancePct,
+  expectedRegionMode,
+  validationMode,
+  contextSource,
+  userAuthoredText,
 }) {
+  const savedServices = serviceEntries(services);
+  const savedDefinitions = serviceDefinitionsForSavedEstimate(services);
   const totalMonthlyUsd = roundCurrency(Number(estimate?.totalCost?.monthly ?? 0));
   const groupMonthlyUsd = roundCurrency(Number(estimate?.groupSubtotal?.monthly ?? 0));
   const regions = regionsFor(services);
   const serviceCodes = serviceCodesFor(services);
-  const serviceFamilies = serviceFamiliesForSavedEstimate(services);
+  const serviceFamilies = [...new Set(savedDefinitions.map((service) => service.category))];
   const modeled = summarizeModeling(services);
   const supportedEnvironments = presentEnvironments(services);
-  const expectedEnvironments = template.expectedEnvironments ?? ENVIRONMENTS;
+  const isIntentAware = validationMode === "intent-aware";
+  const enforceTemplateSpecific =
+    isIntentAware &&
+    hasExplicitValidationContext(contextSource) &&
+    Boolean(template) &&
+    Boolean(blueprint);
+  const expectedEnvironments = template?.expectedEnvironments ?? ENVIRONMENTS;
   const missingEnvironments = expectedEnvironments.filter(
     (environment) => !supportedEnvironments.includes(environment),
   );
   const ec2OperatingSystems = [
     ...new Set(
-      serviceEntries(services)
+      savedServices
         .filter((service) => service.serviceCode === "ec2Enhancement")
         .map((service) => service?.calculationComponents?.selectedOS?.value)
         .filter(Boolean),
     ),
   ];
+  const supportiveServiceCodes = template?.supportiveServiceCodes ?? [];
   const supportiveUsd = roundCurrency(
-    serviceEntries(services)
-      .filter((service) => template.supportiveServiceCodes.includes(service.serviceCode))
+    savedServices
+      .filter((service) => supportiveServiceCodes.includes(service.serviceCode))
       .reduce((sum, service) => sum + modeledServiceMonthlyUsd(service).monthlyUsd, 0),
   );
   const supportiveRatio =
@@ -409,17 +426,24 @@ function buildSavedEstimateChecks({
         `${comparison.serviceCode}: stored ${comparison.storedMonthlyUsd.toFixed(2)} USD vs modeled ${comparison.modeledMonthlyUsd.toFixed(2)} USD`,
     )
     .join("; ");
-  const expectedComputeOs = template.computeOs ?? null;
-  const textCorpus = estimateTextCorpus(estimate, services);
-  const hasRegionJustification = hasJustification(textCorpus);
-  const edgeExposed = serviceEntries(services).some((service) => EDGE_SERVICE_CODES.has(service.serviceCode));
+  const expectedComputeOs = template?.computeOs ?? null;
+  const userAuthoredTextCorpus = userAuthoredValidationText(estimate, userAuthoredText);
+  const hasExplicitRegionJustification = hasRegionJustification(userAuthoredTextCorpus);
+  const edgeExposed = savedServices.some((service) => EDGE_SERVICE_CODES.has(service.serviceCode));
   const hasWaf =
     serviceCodes.includes("awsWAFv2") ||
     serviceCodes.includes("awsWebApplicationFirewall");
   const hasCloudWatch = serviceCodes.includes("amazonCloudWatch");
-  const usesPremiumService = serviceDefinitionsForSavedEstimate(services).some((service) =>
+  const usesPremiumService = savedDefinitions.some((service) =>
     PREMIUM_SERVICE_IDS.has(service.id),
   );
+  const hasExplicitPremiumJustification = hasPremiumJustification(userAuthoredTextCorpus);
+  const supportiveMaxRatio = template?.supportiveMaxRatio ?? 0.25;
+  const primaryMinRatio = template?.primaryMinRatio ?? 0.55;
+  const requiredServiceCodes = template?.requiredServiceCodes ?? [];
+  const requiredServiceFamilies = blueprint?.requiredServiceFamilies ?? [];
+  const nonDefaultRegion = regions[0] && regions[0] !== DEFAULT_REGION;
+  const bestMatchTemplateTitle = template?.title ?? "the inferred service mix";
 
   return {
     checks: [
@@ -511,17 +535,51 @@ function buildSavedEstimateChecks({
           },
         ),
       }),
-      makeRuleResult({
-        pack: "architecture-completeness",
-        id: "architecture.single-region",
-        title: "Single Region",
-        status: regions.length === 1 ? "pass" : "fail",
-        severity: "error",
-        reason: "Funding-oriented estimates should stay regionally coherent unless multi-region is explicit.",
-        remediation: "Scope the estimate to one region or add explicit multi-region support and justification.",
-        details: regions.length === 0 ? "No regions found." : `Regions: ${regions.join(", ")}.`,
-        evidence: stringSetEvidence("regions", regions),
-      }),
+      expectedRegionMode === "single-region"
+        ? makeRuleResult({
+            pack: "architecture-completeness",
+            id: "architecture.single-region",
+            title: "Single Region",
+            status: regions.length === 1 ? "pass" : "fail",
+            severity: "error",
+            reason:
+              "The saved estimate should stay regionally coherent when single-region intent is explicit.",
+            remediation:
+              "Scope the estimate to one region or validate it with expectedRegionMode='multi-region'.",
+            details: regions.length === 0 ? "No regions found." : `Regions: ${regions.join(", ")}.`,
+            evidence: stringSetEvidence("regions", regions),
+          })
+        : expectedRegionMode === "multi-region"
+          ? makeRuleResult({
+              pack: "architecture-completeness",
+              id: "architecture.single-region",
+              title: "Single Region",
+              status: regions.length > 1 ? "pass" : "warning",
+              severity: regions.length > 1 ? "info" : "warning",
+              blocking: false,
+              reason: "This validation run expects multi-region intent.",
+              remediation:
+                "If the estimate is intentionally single-region, validate it with expectedRegionMode='single-region'.",
+              details:
+                regions.length > 1
+                  ? `Multi-region estimate detected: ${regions.join(", ")}.`
+                  : `Expected multi-region scope; found ${regions.join(", ") || "none"}.`,
+              evidence: stringSetEvidence("regions", regions),
+            })
+          : makeRuleResult({
+              pack: "architecture-completeness",
+              id: "architecture.single-region",
+              title: "Single Region",
+              status: regions.length <= 1 ? "pass" : "warning",
+              severity: regions.length <= 1 ? "info" : "warning",
+              blocking: false,
+              reason:
+                "Regional scope is informational unless single-region or multi-region intent is explicit.",
+              remediation:
+                "Pass expectedRegionMode during validation if regional scope should be enforced.",
+              details: regions.length === 0 ? "No regions found." : `Regions: ${regions.join(", ")}.`,
+              evidence: stringSetEvidence("regions", regions),
+            }),
       expectedRegion
         ? makeRuleResult({
             pack: "architecture-completeness",
@@ -550,16 +608,25 @@ function buildSavedEstimateChecks({
         pack: "architecture-completeness",
         id: "architecture.required-service-codes",
         title: "Required Service Codes",
-        status: template.requiredServiceCodes.every((serviceCode) => serviceCodes.includes(serviceCode))
+        status: requiredServiceCodes.every((serviceCode) => serviceCodes.includes(serviceCode))
           ? "pass"
-          : "fail",
-        severity: "error",
-        reason: "Every baseline template requires a minimum set of service families and exact service codes.",
-        remediation: `Ensure the estimate includes ${template.requiredServiceCodes.join(", ")}.`,
-        details: `Required service codes: ${template.requiredServiceCodes.join(", ")}.`,
+          : enforceTemplateSpecific
+            ? "fail"
+            : "warning",
+        severity: enforceTemplateSpecific ? "error" : "warning",
+        blocking: enforceTemplateSpecific,
+        reason: enforceTemplateSpecific
+          ? "Intent-aware validation requires the expected baseline service codes."
+          : "Best-match template coverage is informational when no explicit architecture context was supplied.",
+        remediation: enforceTemplateSpecific
+          ? `Ensure the estimate includes ${requiredServiceCodes.join(", ")}.`
+          : "Pass blueprintId or templateId during validation if service-code coverage should be enforced.",
+        details: enforceTemplateSpecific
+          ? `Required service codes: ${requiredServiceCodes.join(", ")}.`
+          : `Best-match template '${bestMatchTemplateTitle}' expects ${requiredServiceCodes.join(", ")}.`,
         evidence: requiredPresentMissingEvidence(
           "required_service_codes",
-          template.requiredServiceCodes,
+          requiredServiceCodes,
           serviceCodes,
         ),
       }),
@@ -567,16 +634,23 @@ function buildSavedEstimateChecks({
         pack: "architecture-completeness",
         id: "architecture.required-service-families",
         title: "Required Service Families",
-        status: blueprint.requiredServiceFamilies.every((family) => serviceFamilies.includes(family))
+        status: requiredServiceFamilies.every((family) => serviceFamilies.includes(family))
           ? "pass"
-          : "fail",
-        severity: "error",
-        reason: "Blueprint-level architecture validation needs the expected service families to be present.",
-        remediation: `Add the missing family or choose a blueprint that matches the saved service mix.`,
-        details: `Required families: ${blueprint.requiredServiceFamilies.join(", ")}. Present families: ${serviceFamilies.join(", ") || "none"}.`,
+          : enforceTemplateSpecific
+            ? "fail"
+            : "warning",
+        severity: enforceTemplateSpecific ? "error" : "warning",
+        blocking: enforceTemplateSpecific,
+        reason: enforceTemplateSpecific
+          ? "Intent-aware validation requires the expected service-family mix."
+          : "Best-match blueprint families are advisory when validation context was inferred.",
+        remediation: enforceTemplateSpecific
+          ? "Add the missing family or choose a blueprint that matches the saved service mix."
+          : "Pass blueprintId during validation if service-family coverage should be enforced.",
+        details: `Required families: ${requiredServiceFamilies.join(", ")}. Present families: ${serviceFamilies.join(", ") || "none"}.`,
         evidence: requiredPresentMissingEvidence(
           "required_service_families",
-          blueprint.requiredServiceFamilies,
+          requiredServiceFamilies,
           serviceFamilies,
         ),
       }),
@@ -584,15 +658,26 @@ function buildSavedEstimateChecks({
         pack: "architecture-completeness",
         id: "architecture.environment-coverage",
         title: "Environment Coverage",
-        status: missingEnvironments.length === 0 ? "pass" : "fail",
-        severity: "error",
-        reason: `The baseline environment model expects ${expectedEnvironments.join(", ")} coverage.`,
-        remediation:
-          "Add the missing environment rows or document why a reduced environment model is justified.",
+        status:
+          missingEnvironments.length === 0
+            ? "pass"
+            : enforceTemplateSpecific
+              ? "fail"
+              : "warning",
+        severity: enforceTemplateSpecific ? "error" : "warning",
+        blocking: enforceTemplateSpecific,
+        reason: enforceTemplateSpecific
+          ? `The baseline environment model expects ${expectedEnvironments.join(", ")} coverage.`
+          : "Environment coverage is advisory when no explicit environment model was supplied.",
+        remediation: enforceTemplateSpecific
+          ? "Add the missing environment rows or document why a reduced environment model is justified."
+          : "Validate with explicit blueprint/template context if environment coverage should be enforced.",
         details:
           missingEnvironments.length === 0
             ? `Primary services cover ${supportedEnvironments.join(", ")}.`
-            : `Missing environments: ${missingEnvironments.join(", ")}.`,
+            : enforceTemplateSpecific
+              ? `Missing environments: ${missingEnvironments.join(", ")}.`
+              : `Best-match template expects ${expectedEnvironments.join(", ")}; found ${supportedEnvironments.join(", ") || "none"}.`,
         evidence: requiredPresentMissingEvidence(
           "environment_coverage",
           expectedEnvironments,
@@ -607,10 +692,17 @@ function buildSavedEstimateChecks({
             status:
               ec2OperatingSystems.length === 1 && ec2OperatingSystems[0] === expectedComputeOs
                 ? "pass"
-                : "fail",
-            severity: "error",
-            reason: "The compute operating system should remain consistent with the selected blueprint.",
-            remediation: "Use the matching blueprint or rebuild the EC2 rows for the intended operating system.",
+                : enforceTemplateSpecific
+                  ? "fail"
+                  : "warning",
+            severity: enforceTemplateSpecific ? "error" : "warning",
+            blocking: enforceTemplateSpecific,
+            reason: enforceTemplateSpecific
+              ? "The compute operating system should remain consistent with the selected blueprint."
+              : "Compute operating system matching is advisory when the blueprint was inferred.",
+            remediation: enforceTemplateSpecific
+              ? "Use the matching blueprint or rebuild the EC2 rows for the intended operating system."
+              : "Pass blueprintId during validation if compute OS should be enforced.",
             details: `Expected compute OS ${expectedComputeOs}; found ${ec2OperatingSystems.join(", ") || "none"}.`,
             evidence: expectedFoundEvidence("compute_os", expectedComputeOs, ec2OperatingSystems),
           })
@@ -620,24 +712,27 @@ function buildSavedEstimateChecks({
             title: "Compute OS Matches Blueprint",
             status: "warning",
             severity: "warning",
-        blocking: false,
-        reason: "No compute OS expectation was supplied during validation.",
-        remediation: "Pass an explicit blueprint or expected compute OS during validation when compute is present.",
-        details:
-          ec2OperatingSystems.length === 0
-            ? "No EC2 compute rows are present for this blueprint."
-            : "No expected compute OS was supplied.",
+            blocking: false,
+            reason: "No compute OS expectation was supplied during validation.",
+            remediation:
+              "Pass an explicit blueprint or expected compute OS during validation when compute is present.",
+            details:
+              ec2OperatingSystems.length === 0
+                ? "No EC2 compute rows are present for this blueprint."
+                : "No expected compute OS was supplied.",
+            evidence: null,
       }),
       makeRuleResult({
         pack: "funding-readiness",
         id: "funding.supportive-spend-threshold",
         title: "Supportive Spend Threshold",
-        status: supportiveRatio <= template.supportiveMaxRatio ? "pass" : "fail",
-        severity: "error",
+        status: supportiveRatio <= supportiveMaxRatio ? "pass" : "warning",
+        severity: supportiveRatio <= supportiveMaxRatio ? "info" : "warning",
+        blocking: false,
         reason: "Supportive spend should not dominate the estimate.",
         remediation: "Reduce supportive services or increase primary workload scope.",
-        details: `Supportive spend ${percent(supportiveRatio)} vs max ${percent(template.supportiveMaxRatio)}.`,
-        evidence: numericComparisonEvidence("supportive_spend_ratio", supportiveRatio, template.supportiveMaxRatio, {
+        details: `Supportive spend ${percent(supportiveRatio)} vs guidance max ${percent(supportiveMaxRatio)}.`,
+        evidence: numericComparisonEvidence("supportive_spend_ratio", supportiveRatio, supportiveMaxRatio, {
           comparator: "lte",
           unit: "ratio",
         }),
@@ -646,12 +741,13 @@ function buildSavedEstimateChecks({
         pack: "funding-readiness",
         id: "funding.primary-spend-dominant",
         title: "Primary Spend Dominant",
-        status: primaryRatio >= template.primaryMinRatio ? "pass" : "fail",
-        severity: "error",
+        status: primaryRatio >= primaryMinRatio ? "pass" : "warning",
+        severity: primaryRatio >= primaryMinRatio ? "info" : "warning",
+        blocking: false,
         reason: "Primary workload spend should remain dominant for funding review.",
         remediation: "Increase primary workload scope or trim supportive spend.",
-        details: `Primary spend ${percent(primaryRatio)} vs min ${percent(template.primaryMinRatio)}.`,
-        evidence: numericComparisonEvidence("primary_spend_ratio", primaryRatio, template.primaryMinRatio, {
+        details: `Primary spend ${percent(primaryRatio)} vs guidance min ${percent(primaryMinRatio)}.`,
+        evidence: numericComparisonEvidence("primary_spend_ratio", primaryRatio, primaryMinRatio, {
           comparator: "gte",
           unit: "ratio",
         }),
@@ -675,8 +771,12 @@ function buildSavedEstimateChecks({
             status:
               Math.abs(modeled.modeledMonthlyUsd - expectedMonthlyUsd) <= (toleranceUsd ?? 0)
                 ? "pass"
-                : "fail",
-            severity: "error",
+                : "warning",
+            severity:
+              Math.abs(modeled.modeledMonthlyUsd - expectedMonthlyUsd) <= (toleranceUsd ?? 0)
+                ? "info"
+                : "warning",
+            blocking: false,
             reason: "Funding review depends on the estimate landing in an agreed monthly band.",
             remediation: "Resize the architecture or adjust the target monthly budget with explicit justification.",
             details: `Expected ${expectedMonthlyUsd.toFixed(2)} USD within +/-${(toleranceUsd ?? 0).toFixed(2)} USD; modeled ${modeled.modeledMonthlyUsd.toFixed(2)} USD.`,
@@ -691,21 +791,40 @@ function buildSavedEstimateChecks({
               },
             ),
           }),
-      regions[0] && regions[0] !== DEFAULT_REGION
+      nonDefaultRegion
         ? makeRuleResult({
             pack: "platform-governance",
             id: "governance.non-default-region-justification",
             title: "Non-Default Region Justification",
-            status: hasRegionJustification ? "pass" : "fail",
-            severity: "error",
-            reason: "Non-default regions need a clear justification for funding and review.",
-            remediation: "Include residency, regulatory, latency, or compliance justification in the estimate notes or attached SOW.",
-            details: hasRegionJustification
-              ? "A justification marker was found in the estimate text."
-              : `Region ${regions[0]} is outside the default ${DEFAULT_REGION} path and no justification marker was found.`,
+            status:
+              expectedRegion && expectedRegion === regions[0]
+                ? "pass"
+                : hasExplicitRegionJustification
+                  ? "pass"
+                  : "warning",
+            severity:
+              expectedRegion && expectedRegion === regions[0]
+                ? "info"
+                : hasExplicitRegionJustification
+                  ? "info"
+                  : "warning",
+            blocking: false,
+            reason: "Non-default regions are guidance-only unless region intent is explicitly contradictory.",
+            remediation:
+              "Document latency, residency, compliance, or local-operational reasons when they matter for review.",
+            details:
+              expectedRegion && expectedRegion === regions[0]
+                ? `Region ${regions[0]} was explicitly requested.`
+                : hasExplicitRegionJustification
+                  ? "User-authored text includes a non-default region justification."
+                  : `Region ${regions[0]} is non-default. Add context if reviewers need the rationale.`,
             evidence: stateSummaryEvidence(
               "non_default_region_justification",
-              hasRegionJustification ? "justified" : "missing-justification",
+              expectedRegion && expectedRegion === regions[0]
+                ? "explicit-region"
+                : hasExplicitRegionJustification
+                  ? "justified"
+                  : "missing-justification",
               [regions[0]],
             ),
           })
@@ -780,18 +899,18 @@ function buildSavedEstimateChecks({
             pack: "platform-governance",
             id: "governance.premium-managed-service-justification",
             title: "Premium Managed Service Justification",
-            status: hasJustification(textCorpus) ? "pass" : "warning",
-            severity: hasJustification(textCorpus) ? "info" : "warning",
+            status: hasExplicitPremiumJustification ? "pass" : "warning",
+            severity: hasExplicitPremiumJustification ? "info" : "warning",
             blocking: false,
             reason: "Premium managed services are easier to approve when their value is explicit.",
             remediation: "Document why the premium managed service is required for the workload.",
-            details: hasJustification(textCorpus)
-              ? "A justification marker was found for premium managed services."
+            details: hasExplicitPremiumJustification
+              ? "User-authored text includes a premium managed service justification."
               : "Premium managed services are present without a clear justification marker.",
             evidence: stateSummaryEvidence(
               "premium_managed_service_justification",
-              hasJustification(textCorpus) ? "justified" : "missing-justification",
-              serviceDefinitionsForSavedEstimate(services)
+              hasExplicitPremiumJustification ? "justified" : "missing-justification",
+              savedDefinitions
                 .filter((service) => PREMIUM_SERVICE_IDS.has(service.id))
                 .map((service) => service.id),
             ),
@@ -848,7 +967,8 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
       scenario.modeledMonthlyUsd > 0 ? service.monthlyUsd / scenario.modeledMonthlyUsd : 0;
     return (architecture.excludedDefaults ?? []).includes(service.serviceId) && serviceRatio >= 0.12;
   });
-  const hasJustificationNotes = hasJustification(architecture.notes);
+  const hasRegionJustificationNotes = hasRegionJustification(architecture.notes);
+  const hasPremiumJustificationNotes = hasPremiumJustification(architecture.notes);
   const hasWaf = selectedServiceIds.includes("aws-waf-v2");
   const hasCloudWatch = selectedServiceIds.includes("amazon-cloudwatch");
   const edgeExposed = architecture.selectedServices.some((service) =>
@@ -1218,17 +1338,17 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           pack: "platform-governance",
           id: "governance.non-default-region-justification",
           title: "Non-Default Region Justification",
-          status: hasJustificationNotes ? "pass" : "warning",
-          severity: hasJustificationNotes ? "info" : "warning",
+          status: hasRegionJustificationNotes ? "pass" : "warning",
+          severity: hasRegionJustificationNotes ? "info" : "warning",
           blocking: false,
           reason: "Non-default regions are easier to approve when the rationale is explicit.",
           remediation: "Add a residency, latency, compliance, or regulatory justification in the architecture notes.",
-          details: hasJustificationNotes
+          details: hasRegionJustificationNotes
             ? "Architecture notes include a region justification marker."
             : `Architecture targets ${architecture.region} without an explicit justification marker in notes.`,
           evidence: stateSummaryEvidence(
             "non_default_region_justification",
-            hasJustificationNotes ? "justified" : "missing-justification",
+            hasRegionJustificationNotes ? "justified" : "missing-justification",
             [architecture.region],
           ),
         })
@@ -1305,17 +1425,17 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
           pack: "platform-governance",
           id: "governance.premium-managed-service-justification",
           title: "Premium Managed Service Justification",
-          status: hasJustificationNotes ? "pass" : "warning",
-          severity: hasJustificationNotes ? "info" : "warning",
+          status: hasPremiumJustificationNotes ? "pass" : "warning",
+          severity: hasPremiumJustificationNotes ? "info" : "warning",
           blocking: false,
           reason: "Premium managed services should have an explicit value justification.",
           remediation: "Document the reason for the premium managed service in the architecture notes.",
-          details: hasJustificationNotes
+          details: hasPremiumJustificationNotes
             ? "Architecture notes include a premium service justification marker."
             : "Premium managed services are selected without an explicit justification marker in notes.",
           evidence: stateSummaryEvidence(
             "premium_managed_service_justification",
-            hasJustificationNotes ? "justified" : "missing-justification",
+            hasPremiumJustificationNotes ? "justified" : "missing-justification",
             architecture.selectedServices
               .filter((service) => PREMIUM_SERVICE_IDS.has(service.serviceId))
               .map((service) => service.serviceId),
@@ -1379,14 +1499,35 @@ export function validateArchitectureScenario({ architecture, scenario, draftVali
 export function validateEstimatePayload({
   estimate,
   templateId,
+  blueprintId,
+  patternId,
   expectedMonthlyUsd,
   expectedRegion,
+  expectedRegionMode,
+  validationMode,
+  contextSource,
+  userAuthoredText,
   budgetTolerancePct = DEFAULT_BUDGET_TOLERANCE_PCT,
 }) {
   const services = estimate?.services ?? {};
-  const inferredTemplateId = templateId ?? inferTemplateIdFromServices(services);
-  const template = getTemplate(inferredTemplateId);
-  const blueprint = getBlueprint(resolveBlueprintIdForTemplate(template.id));
+  const inferredTemplateId = inferTemplateIdFromServices(services);
+  const resolvedTemplateId = templateId ?? (blueprintId ? getBlueprint(blueprintId).templateId : null);
+  const resolvedContextSource =
+    contextSource ??
+    (templateId || blueprintId ? "explicit" : inferredTemplateId ? "inferred" : "none");
+  const resolvedValidationMode =
+    validationMode ??
+    (resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
+      ? "intent-aware"
+      : "generic");
+  const bestMatchTemplateId =
+    resolvedContextSource === "inferred" && inferredTemplateId ? inferredTemplateId : null;
+  const template = getTemplate(resolvedTemplateId ?? bestMatchTemplateId ?? inferredTemplateId);
+  const resolvedBlueprintId =
+    blueprintId ?? (resolvedTemplateId ? resolveBlueprintIdForTemplate(resolvedTemplateId) : null);
+  const blueprint = getBlueprint(
+    resolvedBlueprintId ?? resolveBlueprintIdForTemplate(template.id),
+  );
   const { checks, parityDetails, modeled } = buildSavedEstimateChecks({
     estimate,
     services,
@@ -1395,17 +1536,27 @@ export function validateEstimatePayload({
     expectedMonthlyUsd,
     expectedRegion,
     budgetTolerancePct,
+    expectedRegionMode,
+    validationMode: resolvedValidationMode,
+    contextSource: resolvedContextSource,
+    userAuthoredText,
   });
   const assumptions = [];
 
-  if (!templateId) {
-    assumptions.push(`Template was inferred as '${inferredTemplateId}' from the saved service mix.`);
+  if (resolvedContextSource === "inferred" && bestMatchTemplateId) {
+    assumptions.push(
+      `Best-match template '${bestMatchTemplateId}' was inferred from the saved service mix for generic validation.`,
+    );
   }
 
   assumptions.push(`Budget tolerance defaulted to ${(budgetTolerancePct * 100).toFixed(0)}%.`);
 
   if (!expectedRegion) {
     assumptions.push("Region expectation was not supplied during validation.");
+  }
+
+  if (!expectedRegionMode) {
+    assumptions.push("Region mode was not supplied during validation.");
   }
 
   if (expectedMonthlyUsd == null) {
@@ -1420,15 +1571,35 @@ export function validateEstimatePayload({
 
   return {
     schemaVersion: VALIDATION_SCHEMA_VERSION,
-    blueprintId: blueprint.id,
-    blueprintTitle: blueprint.title,
-    templateId: template.id,
-    templateTitle: template.title,
+    validationMode: resolvedValidationMode,
+    contextSource: resolvedContextSource,
+    blueprintId:
+      resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
+        ? blueprint.id
+        : undefined,
+    blueprintTitle:
+      resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
+        ? blueprint.title
+        : undefined,
+    templateId:
+      resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
+        ? template.id
+        : undefined,
+    templateTitle:
+      resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
+        ? template.title
+        : undefined,
+    bestMatchBlueprintId:
+      resolvedContextSource === "inferred" ? blueprint.id : null,
+    bestMatchBlueprintTitle:
+      resolvedContextSource === "inferred" ? blueprint.title : null,
+    patternId: patternId ?? undefined,
     expectedMonthlyUsd:
       expectedMonthlyUsd == null ? null : roundCurrency(Number(expectedMonthlyUsd)),
     storedMonthlyUsd: modeled.storedMonthlyUsd,
     modeledMonthlyUsd: modeled.modeledMonthlyUsd,
     expectedRegion: expectedRegion ?? null,
+    expectedRegionMode: expectedRegionMode ?? null,
     regions: regionsFor(services),
     serviceCodes: serviceCodesFor(services),
     ...summary,

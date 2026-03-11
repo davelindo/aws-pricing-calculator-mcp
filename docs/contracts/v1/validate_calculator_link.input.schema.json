@@ -25,12 +25,68 @@
         "warehouse-centric-analytics"
       ]
     },
+    "patternId": {
+      "type": "string",
+      "enum": [
+        "eks-app-platform",
+        "eks-api-front-door",
+        "eks-private-service",
+        "eks-search-content-platform",
+        "container-platform.default",
+        "ec2-web-with-postgres",
+        "ec2-web-with-cdn",
+        "ec2-web-with-private-service",
+        "linux-web-stack.default",
+        "windows-iis-with-postgres",
+        "windows-iis-with-sqlserver",
+        "windows-files-app",
+        "windows-private-sql-service",
+        "windows-app-stack.default",
+        "serverless-edge-api",
+        "cloudfront-alb-origin-app",
+        "private-api-front-door",
+        "edge-api-platform.default",
+        "async-worker-platform",
+        "pubsub-fanout-platform",
+        "event-bus-integration-platform",
+        "event-driven-platform.default",
+        "data-platform-lite.default",
+        "hybrid-transition-state",
+        "ecs-fargate-target-state",
+        "modernization-platform.default",
+        "enterprise-data-platform.default",
+        "enterprise-data-lake.default",
+        "lake-foundation-basic",
+        "lake-foundation-governed",
+        "lake-foundation.default",
+        "lakehouse-serving",
+        "lakehouse-platform.default",
+        "stream-analytics-platform",
+        "streaming-data-platform.default",
+        "redshift-bi-warehouse",
+        "warehouse-centric-analytics.default"
+      ]
+    },
     "expectedMonthlyUsd": {
       "type": "number",
       "exclusiveMinimum": 0
     },
     "expectedRegion": {
       "type": "string"
+    },
+    "expectedRegionMode": {
+      "type": "string",
+      "enum": [
+        "single-region",
+        "multi-region"
+      ]
+    },
+    "validationMode": {
+      "type": "string",
+      "enum": [
+        "generic",
+        "intent-aware"
+      ]
     },
     "budgetTolerancePct": {
       "type": "number",

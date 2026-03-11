@@ -57,10 +57,9 @@ test("designArchitecture keeps the event-driven blueprint fully exact in us-east
 
   assert.equal(architecture.readyToPrice, true);
   assert.equal(architecture.serviceCoverage.unavailable.length, 0);
-  assert.ok(architecture.serviceCoverage.exact.includes("amazon-eventbridge"));
   assert.ok(architecture.serviceCoverage.exact.includes("amazon-sqs"));
-  assert.ok(architecture.serviceCoverage.exact.includes("amazon-sns"));
   assert.ok(architecture.serviceCoverage.exact.includes("amazon-lambda"));
+  assert.equal(architecture.patternId, "async-worker-platform");
 });
 
 test("priceArchitecture keeps scoped core container baselines exact-link eligible", () => {
@@ -78,6 +77,71 @@ test("priceArchitecture keeps scoped core container baselines exact-link eligibl
   assert.equal(priced.architecture.estimateName, "ExampleCo - Container Platform");
   assert.equal(baseline.calculatorEligible, true);
   assert.equal(baseline.linkPlan?.blueprintId, "container-platform");
+});
+
+test("designArchitecture does not infer client names from the brief", () => {
+  const architecture = designArchitecture({
+    brief:
+      "Bullcred needs a 7k monthly EKS Linux environment with PostgreSQL on RDS in us-east-1.",
+  });
+
+  assert.equal(architecture.clientName, null);
+  assert.equal(architecture.estimateName.includes("Bullcred"), false);
+});
+
+test("designArchitecture defaults explicit serviceIds to strict selection", () => {
+  const architecture = designArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 7000,
+    serviceIds: ["application-load-balancer"],
+  });
+
+  assert.equal(architecture.serviceSelectionMode, "strict");
+  assert.ok(
+    architecture.selectedServices.some((service) => service.serviceId === "application-load-balancer"),
+  );
+  assert.equal(
+    architecture.selectedServices.some((service) => service.serviceId === "amazon-cloudwatch"),
+    false,
+  );
+  assert.equal(
+    architecture.selectedServices.some((service) => service.serviceId === "amazon-route53"),
+    false,
+  );
+});
+
+test("designArchitecture allows explicit additive service selection when requested", () => {
+  const architecture = designArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 7000,
+    serviceIds: ["application-load-balancer"],
+    serviceSelectionMode: "augment",
+  });
+
+  assert.equal(architecture.serviceSelectionMode, "augment");
+  assert.ok(
+    architecture.selectedServices.some((service) => service.serviceId === "application-load-balancer"),
+  );
+  assert.ok(
+    architecture.selectedServices.some((service) => service.serviceId === "amazon-cloudwatch"),
+  );
+  assert.ok(
+    architecture.selectedServices.some((service) => service.serviceId === "amazon-route53"),
+  );
+});
+
+test("designArchitecture is not ready to price when the region was only defaulted", () => {
+  const architecture = designArchitecture({
+    blueprintId: "container-platform",
+    targetMonthlyUsd: 7000,
+  });
+
+  assert.equal(architecture.readyToPrice, false);
+  assert.ok(
+    architecture.unresolvedQuestions.some((item) => item.id === "question.region-confirmation"),
+  );
 });
 
 test("priceArchitecture keeps exact add-ons calculator-link eligible in us-east-1", () => {
@@ -193,6 +257,7 @@ test("priceArchitecture keeps the lakehouse blueprint calculator-link eligible i
 test("priceArchitecture maps enterprise data lake briefs to architecture candidates and a real lake-service mix", () => {
   const priced = priceArchitecture({
     brief: "Need a 25k/mo enterprise data lake.",
+    region: "us-east-1",
   });
   const baseline = getScenario(priced);
 
@@ -243,6 +308,16 @@ test("priceArchitecture keeps default shared add-ons calculator-link eligible in
   assert.ok(
     baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-route53"),
   );
+});
+
+test("priceArchitecture recommends the scenario closest to the requested target", () => {
+  const priced = priceArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 7000,
+  });
+
+  assert.equal(priced.recommendedScenarioId, "baseline");
 });
 
 test("designArchitecture returns structured unresolved questions when key inputs are missing", () => {
@@ -378,7 +453,7 @@ test("priceArchitecture keeps the warehouse-centric analytics blueprint calculat
   }
 });
 
-test("priceArchitecture keeps the streaming data blueprint calculator-link eligible across roadmap regions", () => {
+test("priceArchitecture surfaces the stream-processing fit gap across roadmap regions", () => {
   for (const region of ROADMAP_REGIONS) {
     const priced = priceArchitecture({
       blueprintId: "streaming-data-platform",
@@ -391,10 +466,14 @@ test("priceArchitecture keeps the streaming data blueprint calculator-link eligi
     assert.ok(baseline, `expected enterprise data lake baseline for ${region}`);
     assert.equal(
       baseline.calculatorEligible,
-      true,
-      `expected streaming-data-platform eligibility in ${region}`,
+      false,
+      `expected streaming-data-platform non-eligibility in ${region}`,
     );
-    assert.ok(baseline.linkPlan, `expected streaming data link plan in ${region}`);
+    assert.equal(baseline.linkPlan, null);
+    assert.ok(
+      baseline.calculatorBlockers.some((blocker) => blocker.includes("stream-processing-engine")),
+      `expected stream-processing gap in ${region}`,
+    );
     assert.ok(
       baseline.serviceBreakdown.some((service) => service.serviceId === "amazon-athena"),
       `expected Athena in ${region}`,

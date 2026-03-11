@@ -25,6 +25,9 @@ import {
 } from "./contract/v1.js";
 import { validateEstimatePayload } from "./validation.js";
 
+const STRUCTURAL_PACKS = new Set(["pricing-integrity", "architecture-completeness"]);
+const POLICY_PACKS = new Set(["funding-readiness", "platform-governance"]);
+
 function successToolResponse(toolName, text, structuredContent) {
   const normalized = normalizeToolOutput(toolName, structuredContent);
 
@@ -144,12 +147,31 @@ function withToolErrorHandling(toolName, handler) {
 }
 
 function renderChecks(checks) {
-  return checks
-    .map(
-      (check) =>
-        `- ${check.severity.toUpperCase()} [${check.pack}] ${check.id}: ${check.details}`,
-    )
+  const visibleChecks = checks.filter((check) => check.status !== "pass");
+
+  if (visibleChecks.length === 0) {
+    return "- none";
+  }
+
+  return visibleChecks
+    .map((check) => {
+      const statusLabel = check.status === "fail" ? "FAIL" : "WARN";
+      return `- ${statusLabel} [${check.pack}] ${check.id}: ${check.details}`;
+    })
     .join("\n");
+}
+
+function renderValidationSections(validation) {
+  const structuralChecks = validation.checks.filter((check) => STRUCTURAL_PACKS.has(check.pack));
+  const policyChecks = validation.checks.filter((check) => POLICY_PACKS.has(check.pack));
+
+  return [
+    `Structural validation: ${validation.blockingFailures.length === 0 ? "passed" : "failed"}`,
+    renderChecks(structuralChecks),
+    "",
+    `Policy guidance: ${validation.warningRules.length === 0 ? "none" : `${validation.warningRules.length} warning(s)`}`,
+    renderChecks(policyChecks),
+  ].join("\n");
 }
 
 function renderArchitecture(architecture) {
@@ -159,6 +181,8 @@ function renderArchitecture(architecture) {
     `Ready to price: ${architecture.readyToPrice ? "yes" : "no"}`,
     `Confidence: ${architecture.confidence.level} (${architecture.confidence.score}/100)`,
     `Region: ${architecture.region}`,
+    `Region mode: ${architecture.regionMode}`,
+    `Service selection: ${architecture.serviceSelectionMode}`,
     `Target monthly: ${
       architecture.targetMonthlyUsd == null
         ? "not resolved"
@@ -208,15 +232,16 @@ function renderPricedArchitecture(result) {
 function renderGeneratedEstimate(result) {
   return [
     result.shareLink,
+    "Link created successfully.",
     `Blueprint: ${result.blueprintId}`,
     `Target monthly: ${result.targetMonthlyUsd.toFixed(2)} USD`,
     `Modeled monthly: ${result.modeledMonthlyUsd.toFixed(2)} USD`,
     `Stored monthly: ${result.storedMonthlyUsd.toFixed(2)} USD`,
-    `Blocking failures: ${result.validation.blockingFailures.length}`,
-    `Parity rows: ${result.validation.parityDetails.length}`,
+    `Validation: ${result.validation.passed ? "passed" : "needs review"}`,
+    `Structural blockers: ${result.validation.blockingFailures.length}`,
+    `Policy warnings: ${result.validation.warningRules.length}`,
     "",
-    "Validation:",
-    renderChecks(result.validation.checks),
+    renderValidationSections(result.validation),
   ].join("\n");
 }
 
@@ -226,9 +251,50 @@ function renderValidatedEstimate(result) {
     `Estimate: ${result.estimateName}`,
     `Monthly total: ${result.totalMonthlyUsd.toFixed(2)} USD`,
     `Validation: ${result.validation.passed ? "passed" : "needs review"}`,
-    `Blocking failures: ${result.validation.blockingFailures.length}`,
-    `Parity rows: ${result.validation.parityDetails.length}`,
+    `Structural blockers: ${result.validation.blockingFailures.length}`,
+    `Policy warnings: ${result.validation.warningRules.length}`,
+    "",
+    renderValidationSections(result.validation),
   ].join("\n");
+}
+
+function validateBuiltEstimate({ estimate, linkPlan, expectedMonthlyUsd, estimateNotes }) {
+  return validateEstimatePayload({
+    estimate,
+    blueprintId: linkPlan.blueprintId,
+    patternId: linkPlan.patternId,
+    templateId: linkPlan.templateId,
+    expectedMonthlyUsd,
+    expectedRegion: linkPlan.region,
+    expectedRegionMode: "single-region",
+    validationMode: "intent-aware",
+    contextSource: "link-plan",
+    userAuthoredText: estimateNotes,
+  });
+}
+
+function validateFetchedEstimate({
+  estimate,
+  blueprintId,
+  patternId,
+  expectedMonthlyUsd,
+  expectedRegion,
+  expectedRegionMode,
+  validationMode,
+  budgetTolerancePct,
+}) {
+  return validateEstimatePayload({
+    estimate,
+    blueprintId,
+    patternId,
+    templateId: blueprintId ? getBlueprint(blueprintId).templateId : undefined,
+    expectedMonthlyUsd,
+    expectedRegion,
+    expectedRegionMode,
+    validationMode,
+    contextSource: blueprintId || patternId ? "explicit" : undefined,
+    budgetTolerancePct,
+  });
 }
 
 export function createServer() {
@@ -312,11 +378,11 @@ export function createServer() {
       const built = buildCalculatorEstimateFromScenario({ pricedScenario });
       const saved = await saveEstimate(built.estimate);
       const fetched = await fetchSavedEstimate(saved.savedKey);
-      const validation = validateEstimatePayload({
+      const validation = validateBuiltEstimate({
         estimate: fetched.estimate,
-        templateId: built.linkPlan.templateId,
+        linkPlan: built.linkPlan,
         expectedMonthlyUsd: built.linkPlan.targetMonthlyUsd,
-        expectedRegion: built.linkPlan.region,
+        estimateNotes: built.linkPlan.notes,
       });
       const result = {
         estimateId: saved.savedKey,
@@ -360,17 +426,22 @@ export function createServer() {
     withToolErrorHandling("validate_calculator_link", async ({
       shareLinkOrEstimateId,
       blueprintId,
+      patternId,
       expectedMonthlyUsd,
       expectedRegion,
+      expectedRegionMode,
+      validationMode,
       budgetTolerancePct,
     }) => {
       const fetched = await fetchSavedEstimate(shareLinkOrEstimateId);
-      const templateId = blueprintId ? getBlueprint(blueprintId).templateId : undefined;
-      const validation = validateEstimatePayload({
+      const validation = validateFetchedEstimate({
         estimate: fetched.estimate,
-        templateId,
+        blueprintId,
+        patternId,
         expectedMonthlyUsd,
         expectedRegion,
+        expectedRegionMode,
+        validationMode,
         budgetTolerancePct,
       });
       const result = {

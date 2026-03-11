@@ -516,6 +516,13 @@
         "includeDefaultAddOns": {
           "type": "boolean"
         },
+        "serviceSelectionMode": {
+          "type": "string",
+          "enum": [
+            "strict",
+            "augment"
+          ]
+        },
         "serviceIds": {
           "type": "array",
           "items": {
@@ -1572,6 +1579,13 @@
         "region": {
           "type": "string"
         },
+        "regionMode": {
+          "type": "string",
+          "enum": [
+            "single-region",
+            "multi-region"
+          ]
+        },
         "operatingSystem": {
           "type": "string",
           "enum": [
@@ -1611,6 +1625,13 @@
         },
         "includeDefaultAddOns": {
           "type": "boolean"
+        },
+        "serviceSelectionMode": {
+          "type": "string",
+          "enum": [
+            "strict",
+            "augment"
+          ]
         },
         "selectedServices": {
           "type": "array",
@@ -2504,10 +2525,12 @@
         "estimateName",
         "notes",
         "region",
+        "regionMode",
         "operatingSystem",
         "targetMonthlyUsd",
         "environmentSplit",
         "includeDefaultAddOns",
+        "serviceSelectionMode",
         "selectedServices",
         "serviceCoverage",
         "hardConstraints",
@@ -3404,6 +3427,13 @@
             "region": {
               "type": "string"
             },
+            "regionMode": {
+              "type": "string",
+              "enum": [
+                "single-region",
+                "multi-region"
+              ]
+            },
             "operatingSystem": {
               "type": "string",
               "enum": [
@@ -3442,6 +3472,13 @@
             },
             "includeDefaultAddOns": {
               "type": "boolean"
+            },
+            "serviceSelectionMode": {
+              "type": "string",
+              "enum": [
+                "strict",
+                "augment"
+              ]
             },
             "selectedServices": {
               "type": "array",
@@ -4317,10 +4354,12 @@
             "estimateName",
             "notes",
             "region",
+            "regionMode",
             "operatingSystem",
             "targetMonthlyUsd",
             "environmentSplit",
             "includeDefaultAddOns",
+            "serviceSelectionMode",
             "selectedServices",
             "serviceCoverage",
             "hardConstraints",
@@ -4402,6 +4441,13 @@
         },
         "includeDefaultAddOns": {
           "type": "boolean"
+        },
+        "serviceSelectionMode": {
+          "type": "string",
+          "enum": [
+            "strict",
+            "augment"
+          ]
         },
         "serviceIds": {
           "type": "array",
@@ -5462,6 +5508,13 @@
             "region": {
               "type": "string"
             },
+            "regionMode": {
+              "type": "string",
+              "enum": [
+                "single-region",
+                "multi-region"
+              ]
+            },
             "operatingSystem": {
               "type": "string",
               "enum": [
@@ -5501,6 +5554,13 @@
             },
             "includeDefaultAddOns": {
               "type": "boolean"
+            },
+            "serviceSelectionMode": {
+              "type": "string",
+              "enum": [
+                "strict",
+                "augment"
+              ]
             },
             "selectedServices": {
               "type": "array",
@@ -6394,10 +6454,12 @@
             "estimateName",
             "notes",
             "region",
+            "regionMode",
             "operatingSystem",
             "targetMonthlyUsd",
             "environmentSplit",
             "includeDefaultAddOns",
+            "serviceSelectionMode",
             "selectedServices",
             "serviceCoverage",
             "hardConstraints",
@@ -7353,6 +7415,22 @@
                   "schemaVersion": {
                     "type": "string"
                   },
+                  "validationMode": {
+                    "type": "string",
+                    "enum": [
+                      "generic",
+                      "intent-aware"
+                    ]
+                  },
+                  "contextSource": {
+                    "type": "string",
+                    "enum": [
+                      "explicit",
+                      "link-plan",
+                      "inferred",
+                      "none"
+                    ]
+                  },
                   "blueprintId": {
                     "type": "string",
                     "enum": [
@@ -7404,6 +7482,83 @@
                   "templateTitle": {
                     "type": "string"
                   },
+                  "bestMatchBlueprintId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "container-platform",
+                          "linux-web-stack",
+                          "windows-app-stack",
+                          "edge-api-platform",
+                          "event-driven-platform",
+                          "data-platform-lite",
+                          "modernization-platform",
+                          "enterprise-data-platform",
+                          "enterprise-data-lake",
+                          "lake-foundation",
+                          "lakehouse-platform",
+                          "streaming-data-platform",
+                          "warehouse-centric-analytics"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "bestMatchBlueprintTitle": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "patternId": {
+                    "type": "string",
+                    "enum": [
+                      "eks-app-platform",
+                      "eks-api-front-door",
+                      "eks-private-service",
+                      "eks-search-content-platform",
+                      "container-platform.default",
+                      "ec2-web-with-postgres",
+                      "ec2-web-with-cdn",
+                      "ec2-web-with-private-service",
+                      "linux-web-stack.default",
+                      "windows-iis-with-postgres",
+                      "windows-iis-with-sqlserver",
+                      "windows-files-app",
+                      "windows-private-sql-service",
+                      "windows-app-stack.default",
+                      "serverless-edge-api",
+                      "cloudfront-alb-origin-app",
+                      "private-api-front-door",
+                      "edge-api-platform.default",
+                      "async-worker-platform",
+                      "pubsub-fanout-platform",
+                      "event-bus-integration-platform",
+                      "event-driven-platform.default",
+                      "data-platform-lite.default",
+                      "hybrid-transition-state",
+                      "ecs-fargate-target-state",
+                      "modernization-platform.default",
+                      "enterprise-data-platform.default",
+                      "enterprise-data-lake.default",
+                      "lake-foundation-basic",
+                      "lake-foundation-governed",
+                      "lake-foundation.default",
+                      "lakehouse-serving",
+                      "lakehouse-platform.default",
+                      "stream-analytics-platform",
+                      "streaming-data-platform.default",
+                      "redshift-bi-warehouse",
+                      "warehouse-centric-analytics.default"
+                    ]
+                  },
                   "expectedMonthlyUsd": {
                     "anyOf": [
                       {
@@ -7424,6 +7579,20 @@
                     "anyOf": [
                       {
                         "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "expectedRegionMode": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "single-region",
+                          "multi-region"
+                        ]
                       },
                       {
                         "type": "null"
@@ -9435,6 +9604,22 @@
                 "schemaVersion": {
                   "type": "string"
                 },
+                "validationMode": {
+                  "type": "string",
+                  "enum": [
+                    "generic",
+                    "intent-aware"
+                  ]
+                },
+                "contextSource": {
+                  "type": "string",
+                  "enum": [
+                    "explicit",
+                    "link-plan",
+                    "inferred",
+                    "none"
+                  ]
+                },
                 "blueprintId": {
                   "type": "string",
                   "enum": [
@@ -9486,6 +9671,83 @@
                 "templateTitle": {
                   "type": "string"
                 },
+                "bestMatchBlueprintId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "container-platform",
+                        "linux-web-stack",
+                        "windows-app-stack",
+                        "edge-api-platform",
+                        "event-driven-platform",
+                        "data-platform-lite",
+                        "modernization-platform",
+                        "enterprise-data-platform",
+                        "enterprise-data-lake",
+                        "lake-foundation",
+                        "lakehouse-platform",
+                        "streaming-data-platform",
+                        "warehouse-centric-analytics"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "bestMatchBlueprintTitle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "patternId": {
+                  "type": "string",
+                  "enum": [
+                    "eks-app-platform",
+                    "eks-api-front-door",
+                    "eks-private-service",
+                    "eks-search-content-platform",
+                    "container-platform.default",
+                    "ec2-web-with-postgres",
+                    "ec2-web-with-cdn",
+                    "ec2-web-with-private-service",
+                    "linux-web-stack.default",
+                    "windows-iis-with-postgres",
+                    "windows-iis-with-sqlserver",
+                    "windows-files-app",
+                    "windows-private-sql-service",
+                    "windows-app-stack.default",
+                    "serverless-edge-api",
+                    "cloudfront-alb-origin-app",
+                    "private-api-front-door",
+                    "edge-api-platform.default",
+                    "async-worker-platform",
+                    "pubsub-fanout-platform",
+                    "event-bus-integration-platform",
+                    "event-driven-platform.default",
+                    "data-platform-lite.default",
+                    "hybrid-transition-state",
+                    "ecs-fargate-target-state",
+                    "modernization-platform.default",
+                    "enterprise-data-platform.default",
+                    "enterprise-data-lake.default",
+                    "lake-foundation-basic",
+                    "lake-foundation-governed",
+                    "lake-foundation.default",
+                    "lakehouse-serving",
+                    "lakehouse-platform.default",
+                    "stream-analytics-platform",
+                    "streaming-data-platform.default",
+                    "redshift-bi-warehouse",
+                    "warehouse-centric-analytics.default"
+                  ]
+                },
                 "expectedMonthlyUsd": {
                   "anyOf": [
                     {
@@ -9506,6 +9768,20 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "expectedRegionMode": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "single-region",
+                        "multi-region"
+                      ]
                     },
                     {
                       "type": "null"
@@ -10726,6 +11002,22 @@
             "schemaVersion": {
               "type": "string"
             },
+            "validationMode": {
+              "type": "string",
+              "enum": [
+                "generic",
+                "intent-aware"
+              ]
+            },
+            "contextSource": {
+              "type": "string",
+              "enum": [
+                "explicit",
+                "link-plan",
+                "inferred",
+                "none"
+              ]
+            },
             "blueprintId": {
               "type": "string",
               "enum": [
@@ -10777,6 +11069,83 @@
             "templateTitle": {
               "type": "string"
             },
+            "bestMatchBlueprintId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "container-platform",
+                    "linux-web-stack",
+                    "windows-app-stack",
+                    "edge-api-platform",
+                    "event-driven-platform",
+                    "data-platform-lite",
+                    "modernization-platform",
+                    "enterprise-data-platform",
+                    "enterprise-data-lake",
+                    "lake-foundation",
+                    "lakehouse-platform",
+                    "streaming-data-platform",
+                    "warehouse-centric-analytics"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bestMatchBlueprintTitle": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "patternId": {
+              "type": "string",
+              "enum": [
+                "eks-app-platform",
+                "eks-api-front-door",
+                "eks-private-service",
+                "eks-search-content-platform",
+                "container-platform.default",
+                "ec2-web-with-postgres",
+                "ec2-web-with-cdn",
+                "ec2-web-with-private-service",
+                "linux-web-stack.default",
+                "windows-iis-with-postgres",
+                "windows-iis-with-sqlserver",
+                "windows-files-app",
+                "windows-private-sql-service",
+                "windows-app-stack.default",
+                "serverless-edge-api",
+                "cloudfront-alb-origin-app",
+                "private-api-front-door",
+                "edge-api-platform.default",
+                "async-worker-platform",
+                "pubsub-fanout-platform",
+                "event-bus-integration-platform",
+                "event-driven-platform.default",
+                "data-platform-lite.default",
+                "hybrid-transition-state",
+                "ecs-fargate-target-state",
+                "modernization-platform.default",
+                "enterprise-data-platform.default",
+                "enterprise-data-lake.default",
+                "lake-foundation-basic",
+                "lake-foundation-governed",
+                "lake-foundation.default",
+                "lakehouse-serving",
+                "lakehouse-platform.default",
+                "stream-analytics-platform",
+                "streaming-data-platform.default",
+                "redshift-bi-warehouse",
+                "warehouse-centric-analytics.default"
+              ]
+            },
             "expectedMonthlyUsd": {
               "anyOf": [
                 {
@@ -10797,6 +11166,20 @@
               "anyOf": [
                 {
                   "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "expectedRegionMode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "single-region",
+                    "multi-region"
+                  ]
                 },
                 {
                   "type": "null"
@@ -11830,12 +12213,68 @@
             "warehouse-centric-analytics"
           ]
         },
+        "patternId": {
+          "type": "string",
+          "enum": [
+            "eks-app-platform",
+            "eks-api-front-door",
+            "eks-private-service",
+            "eks-search-content-platform",
+            "container-platform.default",
+            "ec2-web-with-postgres",
+            "ec2-web-with-cdn",
+            "ec2-web-with-private-service",
+            "linux-web-stack.default",
+            "windows-iis-with-postgres",
+            "windows-iis-with-sqlserver",
+            "windows-files-app",
+            "windows-private-sql-service",
+            "windows-app-stack.default",
+            "serverless-edge-api",
+            "cloudfront-alb-origin-app",
+            "private-api-front-door",
+            "edge-api-platform.default",
+            "async-worker-platform",
+            "pubsub-fanout-platform",
+            "event-bus-integration-platform",
+            "event-driven-platform.default",
+            "data-platform-lite.default",
+            "hybrid-transition-state",
+            "ecs-fargate-target-state",
+            "modernization-platform.default",
+            "enterprise-data-platform.default",
+            "enterprise-data-lake.default",
+            "lake-foundation-basic",
+            "lake-foundation-governed",
+            "lake-foundation.default",
+            "lakehouse-serving",
+            "lakehouse-platform.default",
+            "stream-analytics-platform",
+            "streaming-data-platform.default",
+            "redshift-bi-warehouse",
+            "warehouse-centric-analytics.default"
+          ]
+        },
         "expectedMonthlyUsd": {
           "type": "number",
           "exclusiveMinimum": 0
         },
         "expectedRegion": {
           "type": "string"
+        },
+        "expectedRegionMode": {
+          "type": "string",
+          "enum": [
+            "single-region",
+            "multi-region"
+          ]
+        },
+        "validationMode": {
+          "type": "string",
+          "enum": [
+            "generic",
+            "intent-aware"
+          ]
         },
         "budgetTolerancePct": {
           "type": "number",
@@ -11874,6 +12313,22 @@
           "properties": {
             "schemaVersion": {
               "type": "string"
+            },
+            "validationMode": {
+              "type": "string",
+              "enum": [
+                "generic",
+                "intent-aware"
+              ]
+            },
+            "contextSource": {
+              "type": "string",
+              "enum": [
+                "explicit",
+                "link-plan",
+                "inferred",
+                "none"
+              ]
             },
             "blueprintId": {
               "type": "string",
@@ -11926,6 +12381,83 @@
             "templateTitle": {
               "type": "string"
             },
+            "bestMatchBlueprintId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "container-platform",
+                    "linux-web-stack",
+                    "windows-app-stack",
+                    "edge-api-platform",
+                    "event-driven-platform",
+                    "data-platform-lite",
+                    "modernization-platform",
+                    "enterprise-data-platform",
+                    "enterprise-data-lake",
+                    "lake-foundation",
+                    "lakehouse-platform",
+                    "streaming-data-platform",
+                    "warehouse-centric-analytics"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bestMatchBlueprintTitle": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "patternId": {
+              "type": "string",
+              "enum": [
+                "eks-app-platform",
+                "eks-api-front-door",
+                "eks-private-service",
+                "eks-search-content-platform",
+                "container-platform.default",
+                "ec2-web-with-postgres",
+                "ec2-web-with-cdn",
+                "ec2-web-with-private-service",
+                "linux-web-stack.default",
+                "windows-iis-with-postgres",
+                "windows-iis-with-sqlserver",
+                "windows-files-app",
+                "windows-private-sql-service",
+                "windows-app-stack.default",
+                "serverless-edge-api",
+                "cloudfront-alb-origin-app",
+                "private-api-front-door",
+                "edge-api-platform.default",
+                "async-worker-platform",
+                "pubsub-fanout-platform",
+                "event-bus-integration-platform",
+                "event-driven-platform.default",
+                "data-platform-lite.default",
+                "hybrid-transition-state",
+                "ecs-fargate-target-state",
+                "modernization-platform.default",
+                "enterprise-data-platform.default",
+                "enterprise-data-lake.default",
+                "lake-foundation-basic",
+                "lake-foundation-governed",
+                "lake-foundation.default",
+                "lakehouse-serving",
+                "lakehouse-platform.default",
+                "stream-analytics-platform",
+                "streaming-data-platform.default",
+                "redshift-bi-warehouse",
+                "warehouse-centric-analytics.default"
+              ]
+            },
             "expectedMonthlyUsd": {
               "anyOf": [
                 {
@@ -11946,6 +12478,20 @@
               "anyOf": [
                 {
                   "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "expectedRegionMode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "single-region",
+                    "multi-region"
+                  ]
                 },
                 {
                   "type": "null"

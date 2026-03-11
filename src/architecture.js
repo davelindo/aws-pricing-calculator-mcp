@@ -1062,6 +1062,19 @@ function inferTargetMonthlyUsd(brief, explicitTarget, warnings, assumptions) {
 }
 
 function inferEnvironmentSplitFromBrief(brief, assumptions) {
+  const lower = brief.toLowerCase();
+
+  if (
+    !(
+      (lower.includes("dev") && lower.includes("prod")) ||
+      lower.includes("environment split") ||
+      lower.includes("environment model") ||
+      lower.includes("non-prod")
+    )
+  ) {
+    return null;
+  }
+
   const match = brief.match(/(\d{1,3})\s*\/\s*(\d{1,3})\s*\/\s*(\d{1,3})/);
 
   if (!match) {
@@ -1077,22 +1090,6 @@ function inferEnvironmentSplitFromBrief(brief, assumptions) {
     staging: Number(match[2]),
     prod: Number(match[3]),
   };
-}
-
-function inferClientNameFromBrief(brief, assumptions) {
-  if (!brief) {
-    return null;
-  }
-
-  const numberedLead = brief.match(/^\s*\d+\s*-\s*([A-Za-z0-9 .&'-]+?)\s*-\s*https?:\/\//m);
-
-  if (!numberedLead?.[1]) {
-    return null;
-  }
-
-  const clientName = numberedLead[1].trim();
-  assumptions.push(`Client name was inferred from the brief as '${clientName}'.`);
-  return clientName;
 }
 
 function inferRegion(brief, explicitRegion, warnings, assumptions) {
@@ -1187,8 +1184,25 @@ function additionalServiceIdsFromBrief(brief) {
   const lower = brief.toLowerCase();
 
   return listServiceCatalog()
-    .filter((service) => service.keywords.some((keyword) => lower.includes(keyword)))
+    .filter((service) => service.keywords.some((keyword) => matchesServiceKeyword(lower, keyword)))
     .map((service) => service.id);
+}
+
+function matchesServiceKeyword(briefLower, keyword) {
+  const normalizedKeyword = keyword.toLowerCase();
+  const index = briefLower.indexOf(normalizedKeyword);
+
+  if (index === -1) {
+    return false;
+  }
+
+  const lookBehind = briefLower.slice(Math.max(0, index - 24), index);
+
+  if (/\b(no|not|without|exclude|excluding|except)\s+$/.test(lookBehind)) {
+    return false;
+  }
+
+  return true;
 }
 
 function selectedServiceMetadata(blueprint, serviceId, required, source) {
@@ -1219,6 +1233,7 @@ function buildSelectedServices({
   serviceIds,
   region,
   includeDefaultAddOns = true,
+  serviceSelectionMode = "augment",
 }) {
   const explicitServiceIds = new Set(serviceIds ?? []);
   const inferredServiceIds = new Set(additionalServiceIdsFromBrief(brief));
@@ -1255,15 +1270,17 @@ function buildSelectedServices({
     pushService(serviceId, "blueprint-required", true);
   }
 
-  if (includeDefaultAddOns) {
+  if (includeDefaultAddOns && serviceSelectionMode === "augment") {
     for (const serviceId of blueprint.defaultAddOnServiceIds) {
       pushService(serviceId, "blueprint-default", false);
     }
   }
 
-  for (const serviceId of blueprint.optionalServiceIds) {
-    if (explicitServiceIds.has(serviceId) || inferredServiceIds.has(serviceId)) {
-      pushService(serviceId, explicitServiceIds.has(serviceId) ? "explicit" : "brief-inferred", false);
+  if (serviceSelectionMode === "augment") {
+    for (const serviceId of blueprint.optionalServiceIds) {
+      if (explicitServiceIds.has(serviceId) || inferredServiceIds.has(serviceId)) {
+        pushService(serviceId, explicitServiceIds.has(serviceId) ? "explicit" : "brief-inferred", false);
+      }
     }
   }
 
@@ -1271,8 +1288,10 @@ function buildSelectedServices({
     pushService(serviceId, "explicit", false);
   }
 
-  for (const serviceId of inferredServiceIds) {
-    pushService(serviceId, "brief-inferred", false);
+  if (serviceSelectionMode === "augment") {
+    for (const serviceId of inferredServiceIds) {
+      pushService(serviceId, "brief-inferred", false);
+    }
   }
 
   return selections;
@@ -2152,13 +2171,16 @@ function recommendedScenarioIdFor(scenarios) {
       const blockingFailures = scenario.validation.blockingFailures?.length ?? 0;
       const warningCount = scenario.validation.warningRules?.length ?? 0;
       const targetDrift = Math.abs(scenario.modeledMonthlyUsd - scenario.targetMonthlyUsd);
+      const withinTargetTolerance = scenario.budgetFit?.status === "fits" ? 1 : 0;
       const score =
-        (scenario.validation.passed ? 120 : 0) +
-        (scenario.calculatorEligible ? 25 : 0) +
-        scenario.expectedSavingsPct * 1.5 -
-        blockingFailures * 60 -
-        warningCount * 8 -
-        targetDrift / 50;
+        (scenario.validation.passed ? 300 : 0) +
+        (scenario.calculatorEligible ? 140 : 0) +
+        withinTargetTolerance * 120 -
+        targetDrift / 10 -
+        blockingFailures * 80 -
+        warningCount * 12 -
+        scenario.modeledMonthlyUsd / 1000 +
+        scenario.expectedSavingsPct * 0.25;
 
       return {
         scenarioId: scenario.id,
@@ -2168,6 +2190,47 @@ function recommendedScenarioIdFor(scenarios) {
     .sort((left, right) => right.score - left.score);
 
   return ranked[0]?.scenarioId ?? null;
+}
+
+function compactValidationCheck(check) {
+  return {
+    ...check,
+    evidence: check.evidence ?? null,
+  };
+}
+
+const COMPACT_VALIDATION_CHECK_IDS = new Set([
+  "architecture.required-blueprint-services",
+  "funding.calculator-link-ready",
+]);
+
+function compactValidationChecks(checks) {
+  return checks
+    .filter(
+      (check) =>
+        check.status !== "pass" || COMPACT_VALIDATION_CHECK_IDS.has(check.id),
+    )
+    .map(compactValidationCheck);
+}
+
+function compactValidationPack(pack) {
+  return {
+    ...pack,
+    checks: compactValidationChecks(pack.checks),
+  };
+}
+
+function compactScenarioValidation(validation) {
+  const packs = validation.packs
+    .map(compactValidationPack)
+    .filter((pack) => pack.failedRuleCount > 0 || pack.warningRuleCount > 0 || pack.checks.length > 0);
+
+  return {
+    ...validation,
+    checks: compactValidationChecks(validation.checks),
+    packs,
+    parityDetails: [],
+  };
 }
 
 function normalizeArchitectureForPricing(architecture) {
@@ -2183,6 +2246,13 @@ function normalizeArchitectureForPricing(architecture) {
     assumptions: architecture?.assumptions ?? [],
     defaultScenarioPolicies: architecture?.defaultScenarioPolicies ?? [],
     selectedServices: architecture?.selectedServices ?? [],
+    serviceSelectionMode:
+      architecture?.serviceSelectionMode ??
+      ((architecture?.selectedServices?.some((service) => service.source === "explicit") &&
+      !architecture?.selectedServices?.some((service) => service.source === "blueprint-default"))
+        ? "strict"
+        : "augment"),
+    regionMode: architecture?.regionMode ?? "single-region",
     serviceCoverage: {
       exact: coverage.exact ?? [],
       modeled: coverage.modeled ?? [],
@@ -2204,6 +2274,7 @@ export function designArchitecture({
   environmentSplit,
   serviceIds,
   includeDefaultAddOns = true,
+  serviceSelectionMode,
   scenarioPolicies,
 } = {}) {
   const assumptions = [];
@@ -2333,12 +2404,13 @@ export function designArchitecture({
     );
   }
 
+  const inferredEnvironmentSplit = inferEnvironmentSplitFromBrief(normalizedBrief, assumptions);
   const resolvedEnvironmentSplit = normalizeEnvironmentSplit(
-    environmentSplit ?? inferEnvironmentSplitFromBrief(normalizedBrief, assumptions) ?? undefined,
+    environmentSplit ?? inferredEnvironmentSplit ?? undefined,
   );
   const environmentSource = environmentSplit
     ? "explicit"
-    : inferEnvironmentSplitFromBrief(normalizedBrief, []) != null
+    : inferredEnvironmentSplit != null
       ? "brief-inferred"
       : "default";
 
@@ -2350,8 +2422,11 @@ export function designArchitecture({
     );
   }
 
-  const resolvedClientName = clientName ?? inferClientNameFromBrief(brief, assumptions) ?? null;
+  const resolvedClientName = clientName ?? null;
   const resolvedEstimateName = estimateName ?? estimateNameFor(resolvedClientName, blueprint.title);
+  const hasExplicitServiceScope = (serviceIds?.length ?? 0) > 0;
+  const resolvedServiceSelectionMode =
+    serviceSelectionMode ?? (hasExplicitServiceScope ? "strict" : "augment");
   const patternCandidates = buildPatternCandidates({
     blueprint,
     brief: normalizedBrief,
@@ -2359,7 +2434,13 @@ export function designArchitecture({
     serviceIds: serviceIds ?? [],
     hardConstraints,
   });
-  const selectedPatternCandidate = patternCandidates[0] ?? {
+  const preferredPatternCandidate =
+    blueprintId && !normalizedBrief
+      ? patternCandidates.find((candidate) => !candidate.id.endsWith(".default"))
+      : null;
+  const selectedPatternCandidate =
+    preferredPatternCandidate ??
+    patternCandidates[0] ?? {
     id: `${blueprint.id}.default`,
     title: blueprint.title,
     budgetFit: selectedCandidate.budgetFit,
@@ -2378,6 +2459,7 @@ export function designArchitecture({
     serviceIds,
     region: resolvedRegion,
     includeDefaultAddOns,
+    serviceSelectionMode: resolvedServiceSelectionMode,
   });
   const serviceCoverage = coverageFor(selectedServices);
 
@@ -2398,6 +2480,18 @@ export function designArchitecture({
         "blueprintId",
         `The brief could map to ${selectedCandidate.blueprintTitle} or ${alternativeCandidates[0].blueprintTitle}.`,
         "Confirm which architecture shape is intended before final pricing if the distinction matters.",
+      ),
+    );
+  }
+
+  if (!hasBrief && !blueprintId && !templateId && !hasExplicitServiceScope) {
+    unresolvedQuestions.push(
+      makeStructuredItem(
+        "question.architecture-intent",
+        "brief",
+        "No workload brief, blueprint, template, or explicit service scope was supplied.",
+        "Describe the workload or pass blueprintId/serviceIds before pricing.",
+        true,
       ),
     );
   }
@@ -2450,6 +2544,7 @@ export function designArchitecture({
         "region",
         `The region defaulted to ${resolvedRegion}. Should the estimate stay there?`,
         "Confirm the operating region before final pricing.",
+        true,
       ),
     );
   }
@@ -2585,10 +2680,12 @@ export function designArchitecture({
     estimateName: resolvedEstimateName,
     notes: notes ?? null,
     region: resolvedRegion,
+    regionMode: "single-region",
     operatingSystem: operatingSystemInference.value,
     targetMonthlyUsd: resolvedTargetMonthlyUsd,
     environmentSplit: resolvedEnvironmentSplit,
     includeDefaultAddOns,
+    serviceSelectionMode: resolvedServiceSelectionMode,
     selectedServices,
     serviceCoverage,
     hardConstraints,
@@ -2793,23 +2890,25 @@ export function priceArchitecture(input = {}) {
             exactAddOns,
           }
         : null;
-    const validation = validateArchitectureScenario({
-      architecture,
-      scenario: {
-        id: policy.id,
-        title: policy.title,
-        targetMonthlyUsd,
-        modeledMonthlyUsd,
-        serviceBreakdown,
-        coverage: {
-          ...coverage,
-          calculatorEligible: linkReady,
+    const validation = compactScenarioValidation(
+      validateArchitectureScenario({
+        architecture,
+        scenario: {
+          id: policy.id,
+          title: policy.title,
+          targetMonthlyUsd,
+          modeledMonthlyUsd,
+          serviceBreakdown,
+          coverage: {
+            ...coverage,
+            calculatorEligible: linkReady,
+          },
+          calculatorBlockers,
+          budgetFit,
         },
-        calculatorBlockers,
-        budgetFit,
-      },
-      draftValidation,
-    });
+        draftValidation,
+      }),
+    );
 
     return {
       id: policy.id,

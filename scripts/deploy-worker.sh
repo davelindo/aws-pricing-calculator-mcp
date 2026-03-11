@@ -15,6 +15,10 @@ CONFIG_FILE="${WRANGLER_CONFIG:-$ROOT_DIR/wrangler.toml}"
 WORKER_NAME="${WORKER_NAME:-aws-pricing-calculator-mcp}"
 WORKER_ENV="${WORKER_ENV:-}"
 
+if [[ -z "${NPM_CONFIG_CACHE:-}" ]]; then
+  export NPM_CONFIG_CACHE="${TMPDIR:-/tmp}/aws-pricing-calculator-mcp-npm-cache"
+fi
+
 if ! command -v npx >/dev/null 2>&1; then
   echo "npx is required to deploy the Cloudflare Worker." >&2
   exit 1

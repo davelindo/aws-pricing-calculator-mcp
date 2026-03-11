@@ -69,6 +69,13 @@
     "includeDefaultAddOns": {
       "type": "boolean"
     },
+    "serviceSelectionMode": {
+      "type": "string",
+      "enum": [
+        "strict",
+        "augment"
+      ]
+    },
     "serviceIds": {
       "type": "array",
       "items": {

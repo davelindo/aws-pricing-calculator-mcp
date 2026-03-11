@@ -180,6 +180,24 @@
       "linux",
       "windows"
     ],
+    "regionMode": [
+      "single-region",
+      "multi-region"
+    ],
+    "serviceSelectionMode": [
+      "strict",
+      "augment"
+    ],
+    "validationMode": [
+      "generic",
+      "intent-aware"
+    ],
+    "validationContextSource": [
+      "explicit",
+      "link-plan",
+      "inferred",
+      "none"
+    ],
     "validationStatus": [
       "pass",
       "warning",
