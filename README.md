@@ -147,7 +147,13 @@ Call `validate_calculator_link`.
 npm run check
 ```
 
-Runs the local lint and test suite.
+Runs lint, verifies the checked-in `v1` contract artifacts are current, and runs the test suite.
+
+```bash
+npm run contracts:generate
+```
+
+Regenerates the checked-in `v1` contract artifacts under `docs/contracts/v1/`.
 
 ```bash
 npm run test:live
@@ -164,8 +170,23 @@ Runs the live save/fetch parity matrix against AWS calculator endpoints.
 | `src/planner.js` | estimate construction helpers used by the MCP surface |
 | `src/validation.js` | saved-estimate validation and policy checks |
 | `src/services/` | service registry, serializers, and saved-cost modeling |
+| `src/contract/v1.js` | frozen `v1` MCP contract definitions |
+| `docs/contracts/v1/` | generated `v1` JSON schemas and emitted tool snapshot |
 | `docs/OPERATOR_GUIDE.md` | operator-oriented usage notes |
 | `test/live-roundtrip.test.js` | live parity matrix for exact coverage |
+
+## v1 Compatibility
+
+The `v1` MCP surface is frozen at these tool names:
+
+- `list_blueprints`
+- `list_service_catalog`
+- `design_architecture`
+- `price_architecture`
+- `create_calculator_link`
+- `validate_calculator_link`
+
+Within `v1`, required top-level fields, stable enum literals, and structured tool-error responses are compatibility commitments. Additive optional fields are allowed. The checked-in source of truth for that contract lives under [docs/contracts/v1/](docs/contracts/v1/).
 
 ## Where To Get Help
 
