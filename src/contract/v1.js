@@ -13,6 +13,7 @@ export const TOOL_NAMES = [
   "list_service_catalog",
   "design_architecture",
   "price_architecture",
+  "generate_calculator_link",
   "create_calculator_link",
   "validate_calculator_link",
 ];
@@ -677,6 +678,15 @@ const pricedArchitectureSchema = z.object({
   warnings: z.array(z.string()),
   assumptions: z.array(z.string()),
 });
+const generatedCalculatorScenarioSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  modeledMonthlyUsd: z.number(),
+  calculatorEligible: z.boolean(),
+  calculatorBlockers: z.array(z.string()),
+  budgetFit: budgetFitSchema,
+  strategySummary: z.string(),
+});
 const generatedEstimateSchema = z.object({
   estimateId: z.string(),
   shareLink: z.string(),
@@ -693,6 +703,24 @@ const generatedEstimateSchema = z.object({
   warnings: z.array(z.string()),
   serviceBreakdown: z.array(serviceBreakdownSchema),
   validation: validationSummarySchema,
+});
+const generatedCalculatorLinkOutputSchema = z.object({
+  architecture: z.object({
+    architectureId: z.string(),
+    blueprintId: blueprintIdEnum,
+    blueprintTitle: z.string(),
+    patternId: patternIdEnum,
+    patternTitle: z.string(),
+    region: z.string(),
+    estimateName: z.string(),
+    targetMonthlyUsd: z.number().nullable(),
+    serviceSelectionMode: serviceSelectionModeEnum,
+    selectedServiceIds: z.array(serviceIdEnum),
+  }),
+  selectedScenario: generatedCalculatorScenarioSummarySchema,
+  recommendedScenarioId: z.string().nullable(),
+  availableScenarios: z.array(generatedCalculatorScenarioSummarySchema),
+  estimate: generatedEstimateSchema,
 });
 const validatedEstimateSchema = z.object({
   estimateId: z.string(),
@@ -749,6 +777,9 @@ export const priceArchitectureInputSchema = z.object({
   serviceIds: z.array(serviceIdEnum).optional(),
   scenarioPolicies: z.array(scenarioPolicySchema.partial()).optional(),
 });
+export const generateCalculatorLinkInputSchema = designArchitectureInputSchema.extend({
+  scenarioId: z.string().optional(),
+});
 export const createCalculatorLinkInputSchema = z.object({
   pricedScenario: pricedScenarioSchema,
 });
@@ -785,14 +816,21 @@ export const TOOL_CONTRACTS = Object.freeze({
   price_architecture: {
     name: "price_architecture",
     description:
-      "Price one or more scenario policies for an architecture and report exact, modeled, and unavailable service coverage.",
+      "Price one or more scenario policies for an architecture and report exact, modeled, and unavailable service coverage. Use generate_calculator_link for the recommended one-shot share-link flow.",
     inputSchema: priceArchitectureInputSchema,
     outputSchema: pricedArchitectureSchema,
+  },
+  generate_calculator_link: {
+    name: "generate_calculator_link",
+    description:
+      "Recommended one-shot flow for chat clients: design if needed, price scenarios, pick a calculator-eligible scenario, create the official AWS calculator share link, and validate the saved estimate.",
+    inputSchema: generateCalculatorLinkInputSchema,
+    outputSchema: generatedCalculatorLinkOutputSchema,
   },
   create_calculator_link: {
     name: "create_calculator_link",
     description:
-      "Create an official AWS calculator share link from an exact priced scenario and validate the saved estimate.",
+      "Create an official AWS calculator share link from an already priced exact scenario and validate the saved estimate.",
     inputSchema: createCalculatorLinkInputSchema,
     outputSchema: generatedEstimateSchema,
   },

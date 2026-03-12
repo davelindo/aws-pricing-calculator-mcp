@@ -15,6 +15,7 @@
         "list_service_catalog",
         "design_architecture",
         "price_architecture",
+        "generate_calculator_link",
         "create_calculator_link",
         "validate_calculator_link"
       ]

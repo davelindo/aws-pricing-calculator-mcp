@@ -39,7 +39,22 @@ function successToolResponse(toolName, text, structuredContent) {
 
 function toolHint(toolName, errorMessage) {
   if (toolName === "price_architecture") {
-    return "Retry with the full architecture returned by design_architecture, or supply blueprintId/brief directly.";
+    return "Retry with the full architecture returned by design_architecture, supply blueprintId/brief directly, or use generate_calculator_link for a one-shot share-link flow.";
+  }
+
+  if (toolName === "generate_calculator_link") {
+    if (/Scenario '/i.test(errorMessage) && /not found/i.test(errorMessage)) {
+      return "Omit scenarioId to let the server pick the best calculator-eligible scenario, or pass baseline, optimized, or aggressive.";
+    }
+
+    if (
+      /calculator-eligible/i.test(errorMessage) ||
+      /cannot mint an official calculator link/i.test(errorMessage)
+    ) {
+      return "Try a different scenarioId, or narrow the request so only exact supported services remain in scope.";
+    }
+
+    return "Pass the same inputs you would use for price_architecture. The server will design, price, select a scenario, and mint the share link.";
   }
 
   if (toolName === "create_calculator_link") {
@@ -47,10 +62,10 @@ function toolHint(toolName, errorMessage) {
       /scenario is not calculator-eligible/i.test(errorMessage) ||
       /cannot mint an official calculator link/i.test(errorMessage)
     ) {
-      return "Pass a calculator-eligible priced scenario from price_architecture, or remove modeled/unavailable services from scope.";
+      return "Pass a calculator-eligible priced scenario from price_architecture, remove modeled/unavailable services from scope, or use generate_calculator_link for a one-shot flow.";
     }
 
-    return "Pass the priced scenario returned by price_architecture and confirm it includes a non-null linkPlan.";
+    return "Pass the priced scenario returned by price_architecture and confirm it includes a non-null linkPlan, or use generate_calculator_link instead.";
   }
 
   if (toolName === "validate_calculator_link") {
@@ -245,6 +260,24 @@ function renderGeneratedEstimate(result) {
   ].join("\n");
 }
 
+function renderGeneratedCalculatorLink(result) {
+  return [
+    result.estimate.shareLink,
+    "Link created successfully.",
+    `Blueprint: ${result.architecture.blueprintTitle}`,
+    `Pattern: ${result.architecture.patternTitle}`,
+    `Selected scenario: ${result.selectedScenario.title}`,
+    `Target monthly: ${result.estimate.targetMonthlyUsd.toFixed(2)} USD`,
+    `Modeled monthly: ${result.selectedScenario.modeledMonthlyUsd.toFixed(2)} USD`,
+    `Stored monthly: ${result.estimate.storedMonthlyUsd.toFixed(2)} USD`,
+    `Validation: ${result.estimate.validation.passed ? "passed" : "needs review"}`,
+    `Structural blockers: ${result.estimate.validation.blockingFailures.length}`,
+    `Policy warnings: ${result.estimate.validation.warningRules.length}`,
+    "",
+    renderValidationSections(result.estimate.validation),
+  ].join("\n");
+}
+
 function renderValidatedEstimate(result) {
   return [
     result.shareLink,
@@ -295,6 +328,105 @@ function validateFetchedEstimate({
     contextSource: blueprintId || patternId ? "explicit" : undefined,
     budgetTolerancePct,
   });
+}
+
+function summarizeGeneratedScenario(scenario) {
+  return {
+    id: scenario.id,
+    title: scenario.title,
+    modeledMonthlyUsd: scenario.modeledMonthlyUsd,
+    calculatorEligible: scenario.calculatorEligible,
+    calculatorBlockers: scenario.calculatorBlockers ?? [],
+    budgetFit: scenario.budgetFit,
+    strategySummary: scenario.strategySummary,
+  };
+}
+
+function selectScenarioForCalculatorLink(priced, scenarioId) {
+  const scenarios = priced?.scenarios ?? [];
+
+  if (scenarios.length === 0) {
+    throw new Error("Unable to create estimate: no priced scenarios were produced.");
+  }
+
+  if (scenarioId) {
+    const selected = scenarios.find((scenario) => scenario.id === scenarioId);
+
+    if (!selected) {
+      throw new Error(
+        `Scenario '${scenarioId}' was not found. Available scenarios: ${scenarios.map((scenario) => scenario.id).join(", ")}.`,
+      );
+    }
+
+    if (!selected.calculatorEligible || !selected.linkPlan) {
+      throw new Error(
+        `Scenario '${scenarioId}' is not calculator-eligible. ${selected.calculatorBlockers?.join(" ") || "No exact link plan was produced."}`,
+      );
+    }
+
+    return selected;
+  }
+
+  const eligibleScenarios = scenarios.filter(
+    (scenario) => scenario.calculatorEligible && scenario.linkPlan,
+  );
+
+  if (eligibleScenarios.length === 0) {
+    throw new Error(
+      `Unable to create estimate: no calculator-eligible scenarios were produced. ${scenarios
+        .flatMap((scenario) => scenario.calculatorBlockers ?? [])
+        .join(" ")}`.trim(),
+    );
+  }
+
+  const recommendedScenario = eligibleScenarios.find(
+    (scenario) => scenario.id === priced.recommendedScenarioId,
+  );
+
+  if (recommendedScenario) {
+    return recommendedScenario;
+  }
+
+  return [...eligibleScenarios].sort(
+    (left, right) =>
+      Math.abs(left.modeledMonthlyUsd - left.targetMonthlyUsd) -
+      Math.abs(right.modeledMonthlyUsd - right.targetMonthlyUsd),
+  )[0];
+}
+
+async function buildGeneratedEstimateResult(pricedScenario) {
+  const built = buildCalculatorEstimateFromScenario({ pricedScenario });
+  const saved = await saveEstimate(built.estimate);
+  const fetched = await fetchSavedEstimate(saved.savedKey);
+  const validation = validateBuiltEstimate({
+    estimate: fetched.estimate,
+    linkPlan: built.linkPlan,
+    expectedMonthlyUsd: built.linkPlan.targetMonthlyUsd,
+    estimateNotes: built.linkPlan.notes,
+  });
+
+  return {
+    estimateId: saved.savedKey,
+    shareLink: saved.shareLink,
+    officialShareLink: isOfficialCalculatorShareLink(saved.shareLink),
+    readOnlyViewer: true,
+    editInstructions:
+      "Shared calculator links open in AWS's read-only viewer. Click 'Update estimate' inside calculator.aws to enter the editable flow.",
+    blueprintId: built.linkPlan.blueprintId,
+    estimateName: fetched.estimate.name,
+    region: built.linkPlan.region,
+    targetMonthlyUsd: built.linkPlan.targetMonthlyUsd,
+    modeledMonthlyUsd: built.validation.modeledMonthlyUsd,
+    storedMonthlyUsd: Number(fetched.estimate?.totalCost?.monthly ?? 0),
+    assumptions: built.validation.assumptions,
+    warnings: built.validation.warnings,
+    serviceBreakdown: built.serviceBreakdown.map((service) => ({
+      ...service,
+      capability:
+        service.capability ?? getServiceRegionCapability(service.serviceId, service.region),
+    })),
+    validation,
+  };
 }
 
 export function createServer() {
@@ -368,6 +500,44 @@ export function createServer() {
   );
 
   server.registerTool(
+    "generate_calculator_link",
+    {
+      description: TOOL_CONTRACTS.generate_calculator_link.description,
+      inputSchema: TOOL_CONTRACTS.generate_calculator_link.inputSchema,
+      outputSchema: TOOL_CONTRACTS.generate_calculator_link.outputSchema,
+    },
+    withToolErrorHandling("generate_calculator_link", async ({ scenarioId, ...args }) => {
+      const priced = priceArchitecture(args);
+      const selectedScenario = selectScenarioForCalculatorLink(priced, scenarioId);
+      const estimate = await buildGeneratedEstimateResult(selectedScenario);
+      const result = {
+        architecture: {
+          architectureId: priced.architecture.architectureId,
+          blueprintId: priced.architecture.blueprintId,
+          blueprintTitle: priced.architecture.blueprintTitle,
+          patternId: priced.architecture.patternId,
+          patternTitle: priced.architecture.patternTitle,
+          region: priced.architecture.region,
+          estimateName: priced.architecture.estimateName,
+          targetMonthlyUsd: priced.architecture.targetMonthlyUsd,
+          serviceSelectionMode: priced.architecture.serviceSelectionMode,
+          selectedServiceIds: priced.architecture.selectedServices.map((service) => service.serviceId),
+        },
+        selectedScenario: summarizeGeneratedScenario(selectedScenario),
+        recommendedScenarioId: priced.recommendedScenarioId,
+        availableScenarios: priced.scenarios.map(summarizeGeneratedScenario),
+        estimate,
+      };
+
+      return successToolResponse(
+        "generate_calculator_link",
+        renderGeneratedCalculatorLink(result),
+        result,
+      );
+    }),
+  );
+
+  server.registerTool(
     "create_calculator_link",
     {
       description: TOOL_CONTRACTS.create_calculator_link.description,
@@ -375,38 +545,7 @@ export function createServer() {
       outputSchema: TOOL_CONTRACTS.create_calculator_link.outputSchema,
     },
     withToolErrorHandling("create_calculator_link", async ({ pricedScenario }) => {
-      const built = buildCalculatorEstimateFromScenario({ pricedScenario });
-      const saved = await saveEstimate(built.estimate);
-      const fetched = await fetchSavedEstimate(saved.savedKey);
-      const validation = validateBuiltEstimate({
-        estimate: fetched.estimate,
-        linkPlan: built.linkPlan,
-        expectedMonthlyUsd: built.linkPlan.targetMonthlyUsd,
-        estimateNotes: built.linkPlan.notes,
-      });
-      const result = {
-        estimateId: saved.savedKey,
-        shareLink: saved.shareLink,
-        officialShareLink: isOfficialCalculatorShareLink(saved.shareLink),
-        readOnlyViewer: true,
-        editInstructions:
-          "Shared calculator links open in AWS's read-only viewer. Click 'Update estimate' inside calculator.aws to enter the editable flow.",
-        blueprintId: built.linkPlan.blueprintId,
-        estimateName: fetched.estimate.name,
-        region: built.linkPlan.region,
-        targetMonthlyUsd: built.linkPlan.targetMonthlyUsd,
-        modeledMonthlyUsd: built.validation.modeledMonthlyUsd,
-        storedMonthlyUsd: Number(fetched.estimate?.totalCost?.monthly ?? 0),
-        assumptions: built.validation.assumptions,
-        warnings: built.validation.warnings,
-        serviceBreakdown: built.serviceBreakdown.map((service) => ({
-          ...service,
-          capability:
-            service.capability ??
-            getServiceRegionCapability(service.serviceId, service.region),
-        })),
-        validation,
-      };
+      const result = await buildGeneratedEstimateResult(pricedScenario);
 
       return successToolResponse(
         "create_calculator_link",

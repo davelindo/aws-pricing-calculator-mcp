@@ -21,13 +21,19 @@
     },
     {
       "name": "price_architecture",
-      "description": "Price one or more scenario policies for an architecture and report exact, modeled, and unavailable service coverage.",
+      "description": "Price one or more scenario policies for an architecture and report exact, modeled, and unavailable service coverage. Use generate_calculator_link for the recommended one-shot share-link flow.",
       "inputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.price_architecture.input",
       "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.price_architecture.output"
     },
     {
+      "name": "generate_calculator_link",
+      "description": "Recommended one-shot flow for chat clients: design if needed, price scenarios, pick a calculator-eligible scenario, create the official AWS calculator share link, and validate the saved estimate.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.generate_calculator_link.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.generate_calculator_link.output"
+    },
+    {
       "name": "create_calculator_link",
-      "description": "Create an official AWS calculator share link from an exact priced scenario and validate the saved estimate.",
+      "description": "Create an official AWS calculator share link from an already priced exact scenario and validate the saved estimate.",
       "inputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.create_calculator_link.input",
       "outputSchemaId": "aws-pricing-calculator-mcp.contract.v1.tools.create_calculator_link.output"
     },

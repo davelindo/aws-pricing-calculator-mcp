@@ -1,0 +1,260 @@
+{
+  "$id": "aws-pricing-calculator-mcp.contract.v1.tools.generate_calculator_link.input",
+  "title": "generate_calculator_link input",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "blueprintId": {
+      "type": "string",
+      "enum": [
+        "container-platform",
+        "linux-web-stack",
+        "windows-app-stack",
+        "edge-api-platform",
+        "event-driven-platform",
+        "data-platform-lite",
+        "modernization-platform",
+        "enterprise-data-platform",
+        "enterprise-data-lake",
+        "lake-foundation",
+        "lakehouse-platform",
+        "streaming-data-platform",
+        "warehouse-centric-analytics"
+      ]
+    },
+    "brief": {
+      "type": "string"
+    },
+    "targetMonthlyUsd": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "region": {
+      "type": "string"
+    },
+    "clientName": {
+      "type": "string"
+    },
+    "estimateName": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "operatingSystem": {
+      "type": "string",
+      "enum": [
+        "linux",
+        "windows"
+      ]
+    },
+    "environmentSplit": {
+      "type": "object",
+      "properties": {
+        "dev": {
+          "type": "number",
+          "minimum": 0
+        },
+        "staging": {
+          "type": "number",
+          "minimum": 0
+        },
+        "prod": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "includeDefaultAddOns": {
+      "type": "boolean"
+    },
+    "serviceSelectionMode": {
+      "type": "string",
+      "enum": [
+        "strict",
+        "augment"
+      ]
+    },
+    "serviceIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "amazon-eks",
+          "amazon-ec2",
+          "amazon-athena",
+          "amazon-redshift",
+          "aws-glue-etl",
+          "aws-glue-data-catalog",
+          "aws-glue-crawlers",
+          "amazon-kinesis-firehose",
+          "amazon-rds-postgresql",
+          "amazon-rds-mysql",
+          "amazon-rds-sqlserver",
+          "amazon-aurora-postgresql",
+          "amazon-aurora-mysql",
+          "amazon-elasticache-redis",
+          "amazon-vpc-nat",
+          "application-load-balancer",
+          "network-load-balancer",
+          "amazon-s3",
+          "amazon-efs",
+          "amazon-ebs",
+          "amazon-ecs-ec2",
+          "amazon-cloudfront",
+          "amazon-lambda",
+          "amazon-dynamodb",
+          "amazon-api-gateway-http",
+          "amazon-route53",
+          "amazon-sqs",
+          "amazon-sns",
+          "amazon-cloudwatch",
+          "amazon-eventbridge",
+          "aws-waf-v2",
+          "amazon-fsx-windows",
+          "amazon-opensearch",
+          "amazon-vpc-endpoints",
+          "amazon-ecs-fargate"
+        ]
+      }
+    },
+    "scenarioPolicies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "computeCommitment": {
+            "type": "string",
+            "enum": [
+              "on-demand",
+              "savings-plans",
+              "reserved",
+              "reserved-heavy"
+            ]
+          },
+          "computeDiscountPct": {
+            "type": "number"
+          },
+          "databaseCommitment": {
+            "type": "string",
+            "enum": [
+              "on-demand",
+              "reserved",
+              "reserved-heavy"
+            ]
+          },
+          "databaseDiscountPct": {
+            "type": "number"
+          },
+          "haPosture": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "targeted-ha",
+              "selective-ha"
+            ]
+          },
+          "prodMultiAz": {
+            "type": "boolean"
+          },
+          "nonProdMultiAz": {
+            "type": "boolean"
+          },
+          "storageStrategy": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "tuned",
+              "lean"
+            ]
+          },
+          "storageMultiplier": {
+            "type": "number"
+          },
+          "environmentSizing": {
+            "type": "string",
+            "enum": [
+              "full-footprint",
+              "right-sized-non-prod",
+              "lean-non-prod"
+            ]
+          },
+          "environmentScaleFactors": {
+            "type": "object",
+            "properties": {
+              "dev": {
+                "type": "number"
+              },
+              "staging": {
+                "type": "number"
+              },
+              "prod": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "dev",
+              "staging",
+              "prod"
+            ],
+            "additionalProperties": false
+          },
+          "sharedServicesProfile": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "trimmed",
+              "lean"
+            ]
+          },
+          "sharedServicesMultiplier": {
+            "type": "number"
+          },
+          "dataTransferProfile": {
+            "type": "string",
+            "enum": [
+              "baseline",
+              "reviewed",
+              "minimized"
+            ]
+          },
+          "dataTransferMultiplier": {
+            "type": "number"
+          },
+          "justificationProfile": {
+            "type": "string",
+            "enum": [
+              "default-baseline",
+              "cost-optimized",
+              "high-optimization"
+            ]
+          },
+          "expectedSavingsPct": {
+            "type": "number"
+          },
+          "coreBudgetFactor": {
+            "type": "number"
+          },
+          "addOnBudgetFactor": {
+            "type": "number"
+          },
+          "strategySummary": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "scenarioId": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
