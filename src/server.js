@@ -27,6 +27,8 @@ import { validateEstimatePayload } from "./validation.js";
 
 const STRUCTURAL_PACKS = new Set(["pricing-integrity", "architecture-completeness"]);
 const POLICY_PACKS = new Set(["funding-readiness", "platform-governance"]);
+const ARCHITECTURE_REF_KIND = "architecture_ref";
+const PRICING_COMMIT_KIND = "pricing_commit";
 
 function successToolResponse(toolName, text, structuredContent) {
   const normalized = normalizeToolOutput(toolName, structuredContent);
@@ -35,6 +37,21 @@ function successToolResponse(toolName, text, structuredContent) {
     content: [{ type: "text", text }],
     structuredContent: normalized,
   };
+}
+
+function encodeOpaqueToken(payload) {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+}
+
+function decodeOpaqueToken(token, expectedKind) {
+  const raw = Buffer.from(token, "base64url").toString("utf8");
+  const payload = JSON.parse(raw);
+
+  if (payload?.kind !== expectedKind) {
+    throw new Error(`Invalid ${expectedKind} token.`);
+  }
+
+  return payload;
 }
 
 function toolHint(toolName, errorMessage) {
@@ -344,6 +361,27 @@ function summarizeGeneratedScenario(scenario) {
   };
 }
 
+function createArchitectureRef(architecture) {
+  return {
+    contractVersion: "v1",
+    kind: ARCHITECTURE_REF_KIND,
+    architectureId: architecture.architectureId,
+    blueprintId: architecture.blueprintId,
+    patternId: architecture.patternId,
+    token: encodeOpaqueToken({
+      kind: ARCHITECTURE_REF_KIND,
+      architecture,
+    }),
+  };
+}
+
+function attachArchitectureRef(architecture) {
+  return {
+    ...architecture,
+    architectureRef: architecture.architectureRef ?? createArchitectureRef(architecture),
+  };
+}
+
 function createPricingCommit(architecture, scenario) {
   if (!scenario?.calculatorEligible || !scenario?.linkPlan) {
     return null;
@@ -351,7 +389,7 @@ function createPricingCommit(architecture, scenario) {
 
   return {
     contractVersion: "v1",
-    kind: "pricing_commit",
+    kind: PRICING_COMMIT_KIND,
     architectureId: architecture.architectureId,
     blueprintId: architecture.blueprintId,
     patternId: architecture.patternId,
@@ -360,16 +398,22 @@ function createPricingCommit(architecture, scenario) {
     modeledMonthlyUsd: scenario.modeledMonthlyUsd,
     targetMonthlyUsd: scenario.targetMonthlyUsd,
     strategySummary: scenario.strategySummary,
-    linkPlan: scenario.linkPlan,
+    token: encodeOpaqueToken({
+      kind: PRICING_COMMIT_KIND,
+      linkPlan: scenario.linkPlan,
+    }),
   };
 }
 
 function attachPricingCommits(priced) {
+  const architecture = attachArchitectureRef(priced.architecture);
+
   return {
     ...priced,
+    architecture,
     scenarios: priced.scenarios.map((scenario) => ({
       ...scenario,
-      pricingCommit: createPricingCommit(priced.architecture, scenario),
+      pricingCommit: createPricingCommit(architecture, scenario),
     })),
   };
 }
@@ -462,6 +506,8 @@ async function buildGeneratedEstimateResult(pricedScenario) {
 }
 
 function scenarioFromPricingCommit(pricingCommit) {
+  const payload = decodeOpaqueToken(pricingCommit.token, PRICING_COMMIT_KIND);
+
   return {
     id: pricingCommit.scenarioId,
     title: pricingCommit.scenarioTitle,
@@ -470,7 +516,7 @@ function scenarioFromPricingCommit(pricingCommit) {
     strategySummary: pricingCommit.strategySummary,
     calculatorEligible: true,
     calculatorBlockers: [],
-    linkPlan: pricingCommit.linkPlan,
+    linkPlan: payload.linkPlan,
     pricingCommit,
   };
 }
@@ -523,7 +569,7 @@ export function createServer() {
       outputSchema: TOOL_CONTRACTS.design_architecture.outputSchema,
     },
     withToolErrorHandling("design_architecture", async (args) => {
-      const architecture = designArchitecture(args);
+      const architecture = attachArchitectureRef(designArchitecture(args));
       return successToolResponse(
         "design_architecture",
         renderArchitecture(architecture),
@@ -539,9 +585,21 @@ export function createServer() {
       inputSchema: TOOL_CONTRACTS.price_architecture.inputSchema,
       outputSchema: TOOL_CONTRACTS.price_architecture.outputSchema,
     },
-    withToolErrorHandling("price_architecture", async (args) => {
-      const priced = attachPricingCommits(priceArchitecture(args));
-      return successToolResponse("price_architecture", renderPricedArchitecture(priced), priced);
+    withToolErrorHandling("price_architecture", async ({ architectureRef, ...args }) => {
+      const resolvedArchitecture = architectureRef
+        ? decodeOpaqueToken(architectureRef.token, ARCHITECTURE_REF_KIND).architecture
+        : args.architecture;
+      const resolvedPriced = attachPricingCommits(
+        priceArchitecture({
+          ...args,
+          architecture: resolvedArchitecture,
+        }),
+      );
+      return successToolResponse(
+        "price_architecture",
+        renderPricedArchitecture(resolvedPriced),
+        resolvedPriced,
+      );
     }),
   );
 

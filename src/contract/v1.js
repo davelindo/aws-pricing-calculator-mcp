@@ -539,7 +539,16 @@ const architectureInferenceSchema = z.object({
     confidence: z.number(),
   }),
 });
+const architectureRefSchema = z.object({
+  contractVersion: z.literal(V1_CONTRACT_VERSION),
+  kind: z.literal("architecture_ref"),
+  architectureId: z.string(),
+  blueprintId: blueprintIdEnum,
+  patternId: patternIdEnum,
+  token: z.string(),
+});
 const architectureSchema = z.object({
+  architectureRef: architectureRefSchema.nullable().optional(),
   version: z.string(),
   architectureId: z.string(),
   readyToPrice: z.boolean(),
@@ -650,7 +659,7 @@ const pricingCommitSchema = z.object({
   modeledMonthlyUsd: z.number(),
   targetMonthlyUsd: z.number(),
   strategySummary: z.string(),
-  linkPlan: linkPlanSchema,
+  token: z.string(),
 });
 const pricedScenarioSchema = z.object({
   id: z.string(),
@@ -777,7 +786,8 @@ export const designArchitectureInputSchema = z.object({
   scenarioPolicies: z.array(scenarioPolicySchema.partial()).optional(),
 });
 export const priceArchitectureInputSchema = z.object({
-  architecture: architectureSchema.optional(),
+  architecture: z.unknown().optional(),
+  architectureRef: architectureRefSchema.optional(),
   blueprintId: blueprintIdEnum.optional(),
   brief: z.string().optional(),
   targetMonthlyUsd: z.number().positive().optional(),
@@ -796,7 +806,7 @@ export const generateCalculatorLinkInputSchema = designArchitectureInputSchema.e
   scenarioId: z.string().optional(),
 });
 export const createCalculatorLinkInputSchema = z.object({
-  pricedScenario: pricedScenarioSchema.optional(),
+  pricedScenario: z.unknown().optional(),
   pricingCommit: pricingCommitSchema.optional(),
 }).refine((value) => value.pricedScenario || value.pricingCommit, {
   message: "Pass pricedScenario or pricingCommit.",

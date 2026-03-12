@@ -105,6 +105,24 @@ test("listTools exposes the frozen v1 surface", async (t) => {
   );
 });
 
+test("tool action metadata stays compact enough for chat client refresh limits", async (t) => {
+  const client = await createTestClient(t);
+  const result = await client.listTools();
+
+  for (const tool of result.tools) {
+    const metadataLength = JSON.stringify({
+      name: tool.name,
+      description: tool.description ?? null,
+      inputSchema: tool.inputSchema ?? null,
+    }).length;
+
+    assert.ok(
+      metadataLength < 15000,
+      `${tool.name} metadata is too large for reliable action refresh (${metadataLength} chars)`,
+    );
+  }
+});
+
 test("design_architecture returns the canonical v1 shape without leaked internal policy fields", async (t) => {
   const client = await createTestClient(t);
   const result = await client.callTool({
