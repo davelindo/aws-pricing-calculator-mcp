@@ -1,11 +1,17 @@
 import {
   DEFAULT_BUDGET_TOLERANCE_PCT,
   DEFAULT_REGION,
+  getArchitecturePattern,
   getBlueprint,
   getTemplate,
+  listArchitecturePatterns,
   resolveBlueprintIdForTemplate,
+  supportedBlueprintIds,
 } from "./catalog.js";
-import { resolveServiceDefinitionForSavedService } from "./services/index.js";
+import {
+  findServiceDefinitionByCalculatorServiceCode,
+  resolveServiceDefinitionForSavedService,
+} from "./services/index.js";
 import {
   ENVIRONMENTS,
   parseEnvironmentTag,
@@ -40,6 +46,13 @@ const EDGE_SERVICE_CODES = new Set([
   "amazonELB",
   "amazonRoute53",
 ]);
+const EDGE_SERVICE_IDS = new Set([
+  "amazon-cloudfront",
+  "amazon-api-gateway-http",
+  "application-load-balancer",
+  "network-load-balancer",
+  "amazon-route53",
+]);
 const PREMIUM_SERVICE_IDS = new Set([
   "amazon-rds-sqlserver",
   "amazon-aurora-postgresql",
@@ -47,10 +60,282 @@ const PREMIUM_SERVICE_IDS = new Set([
   "amazon-opensearch",
   "amazon-fsx-windows",
 ]);
+const SERVICE_CODE_ALIAS_TO_ID = new Map([
+  ["amazonApiGateway", "amazon-api-gateway-http"],
+  ["amazonAthena", "amazon-athena"],
+  ["amazonAuroraMySQLCompatible", "amazon-aurora-mysql"],
+  ["amazonCloudFront", "amazon-cloudfront"],
+  ["amazonCloudWatch", "amazon-cloudwatch"],
+  ["amazonDynamoDB", "amazon-dynamodb"],
+  ["amazonEFS", "amazon-efs"],
+  ["amazonELB", "application-load-balancer"],
+  ["amazonElasticBlockStore", "amazon-ebs"],
+  ["amazonElasticsearchService", "amazon-opensearch"],
+  ["amazonEventBridge", "amazon-eventbridge"],
+  ["amazonFSx", "amazon-fsx-windows"],
+  ["amazonFSxWindowsFileServer", "amazon-fsx-windows"],
+  ["amazonKinesisFirehose", "amazon-kinesis-firehose"],
+  ["amazonLambda", "amazon-lambda"],
+  ["amazonNLB", "network-load-balancer"],
+  ["amazonRDSAuroraPostgreSQLCompatibleDB", "amazon-aurora-postgresql"],
+  ["amazonRDSForSQLServer", "amazon-rds-sqlserver"],
+  ["amazonRDSMySQLDB", "amazon-rds-mysql"],
+  ["amazonRDSPostgreSQLDB", "amazon-rds-postgresql"],
+  ["amazonRedshift", "amazon-redshift"],
+  ["amazonRoute53", "amazon-route53"],
+  ["amazonS3", "amazon-s3"],
+  ["amazonSimpleQueueService", "amazon-sqs"],
+  ["amazonVirtualPrivateCloud", "amazon-vpc-nat"],
+  ["aWSLambda", "amazon-lambda"],
+  ["awsEks", "amazon-eks"],
+  ["awsEtlJobsAndDevelopmentEndpoints", "aws-glue-etl"],
+  ["awsFargate", "amazon-ecs-fargate"],
+  ["awsGlueCrawlers", "aws-glue-crawlers"],
+  ["awsGlueDataCatalogStorageRequests", "aws-glue-data-catalog"],
+  ["awsPrivateLinkVpc", "amazon-vpc-endpoints"],
+  ["awsWAFv2", "aws-waf-v2"],
+  ["awsWebApplicationFirewall", "aws-waf-v2"],
+  ["dynamoDbOnDemand", "amazon-dynamodb"],
+  ["ec2Enhancement", "amazon-ec2"],
+  ["networkLoadBalancer", "network-load-balancer"],
+  ["standardTopics", "amazon-sns"],
+]);
 const REGION_JUSTIFICATION_SIGNAL =
   /(regulat|residency|sovereign|compliance|latency|country|local|regional|brazil|sao paulo)/i;
 const PREMIUM_JUSTIFICATION_SIGNAL =
   /(license|migration|moderni|managed|search|sql server|aurora|windows|performance|operational|availability)/i;
+
+function dedupe(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function canonicalServiceIdForServiceCode(serviceCode) {
+  return (
+    findServiceDefinitionByCalculatorServiceCode(serviceCode)?.id ??
+    SERVICE_CODE_ALIAS_TO_ID.get(serviceCode) ??
+    null
+  );
+}
+
+function serviceIdsForServiceCodes(serviceCodes = []) {
+  return dedupe(serviceCodes.map((serviceCode) => canonicalServiceIdForServiceCode(serviceCode)));
+}
+
+function blueprintIdForPattern(patternId) {
+  for (const blueprintId of supportedBlueprintIds()) {
+    if (listArchitecturePatterns(blueprintId).some((pattern) => pattern.id === patternId)) {
+      return blueprintId;
+    }
+  }
+
+  return null;
+}
+
+function patternForTemplate(blueprintId, templateId) {
+  if (!blueprintId || !templateId) {
+    return null;
+  }
+
+  const patterns = listArchitecturePatterns(blueprintId).filter(
+    (pattern) => pattern.templateId === templateId,
+  );
+
+  if (patterns.length !== 1) {
+    return null;
+  }
+
+  return getArchitecturePattern(blueprintId, patterns[0].id);
+}
+
+function scorePatternCandidate(pattern, savedServiceIds, savedServiceFamilies) {
+  const blueprint = getBlueprint(pattern.blueprintId);
+  const template = pattern.templateId ? getTemplate(pattern.templateId) : null;
+  const requiredServiceIds = pattern.requiredServiceIds ?? [];
+  const requiredServiceFamilies = pattern.requiredServiceFamilies ?? [];
+  const relatedServiceIds = new Set([
+    ...requiredServiceIds,
+    ...(pattern.primaryServiceIds ?? []),
+    ...(pattern.defaultAddOnServiceIds ?? []),
+    ...(pattern.optionalServiceIds ?? []),
+  ]);
+  const presentRequiredIds = requiredServiceIds.filter((serviceId) => savedServiceIds.has(serviceId));
+  const missingRequiredIds = requiredServiceIds.filter((serviceId) => !savedServiceIds.has(serviceId));
+  const presentRequiredFamilies = requiredServiceFamilies.filter((family) =>
+    savedServiceFamilies.has(family),
+  );
+  const missingRequiredFamilies = requiredServiceFamilies.filter(
+    (family) => !savedServiceFamilies.has(family),
+  );
+  const matchedRelatedIds = [...savedServiceIds].filter((serviceId) =>
+    relatedServiceIds.has(serviceId),
+  );
+  const unmatchedServiceIds = [...savedServiceIds].filter(
+    (serviceId) => !relatedServiceIds.has(serviceId),
+  );
+
+  return {
+    score:
+      presentRequiredIds.length * 30 -
+      missingRequiredIds.length * 18 +
+      presentRequiredFamilies.length * 14 -
+      missingRequiredFamilies.length * 8 +
+      matchedRelatedIds.length * 8 -
+      Math.min(unmatchedServiceIds.length, 4) * 3,
+    presentRequiredIds,
+    missingRequiredIds,
+    presentRequiredFamilies,
+    missingRequiredFamilies,
+    expectedComputeOs:
+      pattern.defaultOperatingSystem ?? template?.computeOs ?? blueprint.defaultOperatingSystem,
+  };
+}
+
+function inferPatternContext(services, savedDefinitions) {
+  const savedServiceIds = new Set(dedupe(savedDefinitions.map((definition) => definition.id)));
+  const savedServiceFamilies = new Set(
+    dedupe(savedDefinitions.map((definition) => definition.category)),
+  );
+  const savedOperatingSystems = dedupe(
+    serviceEntries(services)
+      .filter((service) => service.serviceCode === "ec2Enhancement")
+      .map((service) => service?.calculationComponents?.selectedOS?.value),
+  );
+
+  if (savedServiceIds.size === 0) {
+    return null;
+  }
+
+  const candidates = [];
+
+  for (const blueprintId of supportedBlueprintIds()) {
+    for (const pattern of listArchitecturePatterns(blueprintId)) {
+      const candidate = scorePatternCandidate(pattern, savedServiceIds, savedServiceFamilies);
+
+      if (savedOperatingSystems.length === 1 && candidate.expectedComputeOs) {
+        candidate.score +=
+          candidate.expectedComputeOs === savedOperatingSystems[0]
+            ? 18
+            : -20;
+      }
+
+      candidates.push({
+        blueprintId,
+        pattern,
+        ...candidate,
+      });
+    }
+  }
+
+  candidates.sort(
+    (left, right) =>
+      right.score - left.score ||
+      left.missingRequiredIds.length - right.missingRequiredIds.length ||
+      right.presentRequiredIds.length - left.presentRequiredIds.length ||
+      right.presentRequiredFamilies.length - left.presentRequiredFamilies.length,
+  );
+
+  const best = candidates[0];
+  const runnerUp = candidates[1];
+
+  if (!best || best.score <= 0) {
+    return null;
+  }
+
+  const confidenceGap = best.score - (runnerUp?.score ?? 0);
+  const confidence =
+    best.missingRequiredIds.length === 0 && confidenceGap >= 12
+      ? "high"
+      : best.presentRequiredIds.length > 0 && confidenceGap >= 6
+        ? "medium"
+        : "low";
+  const blueprint = getBlueprint(best.blueprintId);
+  const pattern = getArchitecturePattern(best.blueprintId, best.pattern.id);
+
+  return {
+    blueprint,
+    pattern,
+    template: getTemplate(pattern.templateId ?? blueprint.templateId),
+    confidence,
+  };
+}
+
+function resolveValidationContext({
+  services,
+  templateId,
+  blueprintId,
+  patternId,
+  validationMode,
+  contextSource,
+}) {
+  const savedDefinitions = serviceDefinitionsForSavedEstimate(services);
+  const explicitPatternBlueprintId = patternId ? blueprintIdForPattern(patternId) : null;
+  const resolvedBlueprintId =
+    blueprintId ??
+    explicitPatternBlueprintId ??
+    (templateId ? resolveBlueprintIdForTemplate(templateId) : null);
+  const resolvedPattern =
+    patternId && resolvedBlueprintId
+      ? getArchitecturePattern(resolvedBlueprintId, patternId)
+      : patternForTemplate(resolvedBlueprintId, templateId);
+  const resolvedTemplate =
+    resolvedPattern != null
+      ? getTemplate(resolvedPattern.templateId ?? getBlueprint(resolvedBlueprintId).templateId)
+      : templateId
+        ? getTemplate(templateId)
+        : resolvedBlueprintId
+          ? getTemplate(getBlueprint(resolvedBlueprintId).templateId)
+          : null;
+  const resolvedBlueprint = resolvedBlueprintId ? getBlueprint(resolvedBlueprintId) : null;
+  const resolvedContextSource =
+    contextSource ??
+    (templateId || blueprintId || patternId ? "explicit" : null);
+
+  if (resolvedContextSource) {
+    return {
+      savedDefinitions,
+      validationMode:
+        validationMode ??
+        (resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
+          ? "intent-aware"
+          : "generic"),
+      contextSource: resolvedContextSource,
+      blueprint: resolvedBlueprint,
+      pattern: resolvedPattern,
+      template: resolvedTemplate,
+      bestMatch: null,
+    };
+  }
+
+  const inferredPatternContext = inferPatternContext(services, savedDefinitions);
+  const fallbackTemplateId = inferTemplateIdFromServices(services);
+  const fallbackTemplate = fallbackTemplateId ? getTemplate(fallbackTemplateId) : null;
+  const fallbackBlueprint = fallbackTemplate
+    ? getBlueprint(resolveBlueprintIdForTemplate(fallbackTemplate.id))
+    : null;
+  const fallbackPattern = fallbackBlueprint
+    ? patternForTemplate(fallbackBlueprint.id, fallbackTemplate.id)
+    : null;
+  const bestMatch = inferredPatternContext ?? (
+    fallbackTemplate && fallbackBlueprint
+      ? {
+          blueprint: fallbackBlueprint,
+          pattern: fallbackPattern,
+          template: fallbackTemplate,
+          confidence: "low",
+        }
+      : null
+  );
+
+  return {
+    savedDefinitions,
+    validationMode: validationMode ?? "generic",
+    contextSource: bestMatch ? "inferred" : "none",
+    blueprint: bestMatch?.blueprint ?? null,
+    pattern: bestMatch?.pattern ?? null,
+    template: bestMatch?.template ?? null,
+    bestMatch,
+  };
+}
 
 function inferTemplateIdFromServices(services) {
   const serviceCodes = serviceCodesFor(services);
@@ -363,8 +648,10 @@ function hasPremiumJustification(text) {
 function buildSavedEstimateChecks({
   estimate,
   services,
+  savedDefinitions,
   template,
   blueprint,
+  pattern,
   expectedMonthlyUsd,
   expectedRegion,
   budgetTolerancePct,
@@ -374,12 +661,12 @@ function buildSavedEstimateChecks({
   userAuthoredText,
 }) {
   const savedServices = serviceEntries(services);
-  const savedDefinitions = serviceDefinitionsForSavedEstimate(services);
   const totalMonthlyUsd = roundCurrency(Number(estimate?.totalCost?.monthly ?? 0));
   const groupMonthlyUsd = roundCurrency(Number(estimate?.groupSubtotal?.monthly ?? 0));
   const regions = regionsFor(services);
   const serviceCodes = serviceCodesFor(services);
-  const serviceFamilies = [...new Set(savedDefinitions.map((service) => service.category))];
+  const serviceIds = dedupe(savedDefinitions.map((service) => service.id));
+  const serviceFamilies = dedupe(savedDefinitions.map((service) => service.category));
   const modeled = summarizeModeling(services);
   const supportedEnvironments = presentEnvironments(services);
   const isIntentAware = validationMode === "intent-aware";
@@ -400,11 +687,17 @@ function buildSavedEstimateChecks({
         .filter(Boolean),
     ),
   ];
-  const supportiveServiceCodes = template?.supportiveServiceCodes ?? [];
+  const supportiveServiceIds = serviceIdsForServiceCodes(template?.supportiveServiceCodes ?? []);
   const supportiveUsd = roundCurrency(
-    savedServices
-      .filter((service) => supportiveServiceCodes.includes(service.serviceCode))
-      .reduce((sum, service) => sum + modeledServiceMonthlyUsd(service).monthlyUsd, 0),
+    savedServices.reduce((sum, service) => {
+      const savedServiceId =
+        resolveServiceDefinitionForSavedService(service)?.id ??
+        canonicalServiceIdForServiceCode(service.serviceCode);
+
+      return supportiveServiceIds.includes(savedServiceId)
+        ? sum + modeledServiceMonthlyUsd(service).monthlyUsd
+        : sum;
+    }, 0),
   );
   const supportiveRatio =
     modeled.modeledMonthlyUsd > 0 ? supportiveUsd / modeled.modeledMonthlyUsd : 0;
@@ -429,20 +722,25 @@ function buildSavedEstimateChecks({
   const expectedComputeOs = template?.computeOs ?? null;
   const userAuthoredTextCorpus = userAuthoredValidationText(estimate, userAuthoredText);
   const hasExplicitRegionJustification = hasRegionJustification(userAuthoredTextCorpus);
-  const edgeExposed = savedServices.some((service) => EDGE_SERVICE_CODES.has(service.serviceCode));
-  const hasWaf =
-    serviceCodes.includes("awsWAFv2") ||
-    serviceCodes.includes("awsWebApplicationFirewall");
-  const hasCloudWatch = serviceCodes.includes("amazonCloudWatch");
+  const edgeExposed =
+    serviceIds.some((serviceId) => EDGE_SERVICE_IDS.has(serviceId)) ||
+    savedServices.some((service) => EDGE_SERVICE_CODES.has(service.serviceCode));
+  const hasWaf = serviceIds.includes("aws-waf-v2");
+  const hasCloudWatch = serviceIds.includes("amazon-cloudwatch");
   const usesPremiumService = savedDefinitions.some((service) =>
     PREMIUM_SERVICE_IDS.has(service.id),
   );
   const hasExplicitPremiumJustification = hasPremiumJustification(userAuthoredTextCorpus);
   const supportiveMaxRatio = template?.supportiveMaxRatio ?? 0.25;
   const primaryMinRatio = template?.primaryMinRatio ?? 0.55;
-  const requiredServiceCodes = template?.requiredServiceCodes ?? [];
-  const requiredServiceFamilies = blueprint?.requiredServiceFamilies ?? [];
-  const nonDefaultRegion = regions[0] && regions[0] !== DEFAULT_REGION;
+  const requiredServiceIds =
+    pattern?.requiredServiceIds ??
+    blueprint?.requiredServiceIds ??
+    serviceIdsForServiceCodes(template?.requiredServiceCodes ?? []);
+  const requiredServiceFamilies =
+    pattern?.requiredServiceFamilies ?? blueprint?.requiredServiceFamilies ?? [];
+  const nonDefaultRegions = regions.filter((region) => region !== DEFAULT_REGION);
+  const nonDefaultRegion = nonDefaultRegions.length > 0;
   const bestMatchTemplateTitle = template?.title ?? "the inferred service mix";
 
   return {
@@ -608,7 +906,7 @@ function buildSavedEstimateChecks({
         pack: "architecture-completeness",
         id: "architecture.required-service-codes",
         title: "Required Service Codes",
-        status: requiredServiceCodes.every((serviceCode) => serviceCodes.includes(serviceCode))
+        status: requiredServiceIds.every((serviceId) => serviceIds.includes(serviceId))
           ? "pass"
           : enforceTemplateSpecific
             ? "fail"
@@ -616,18 +914,18 @@ function buildSavedEstimateChecks({
         severity: enforceTemplateSpecific ? "error" : "warning",
         blocking: enforceTemplateSpecific,
         reason: enforceTemplateSpecific
-          ? "Intent-aware validation requires the expected baseline service codes."
+          ? "Intent-aware validation requires the expected baseline services."
           : "Best-match template coverage is informational when no explicit architecture context was supplied.",
         remediation: enforceTemplateSpecific
-          ? `Ensure the estimate includes ${requiredServiceCodes.join(", ")}.`
+          ? `Ensure the estimate includes ${requiredServiceIds.join(", ")}.`
           : "Pass blueprintId or templateId during validation if service-code coverage should be enforced.",
         details: enforceTemplateSpecific
-          ? `Required service codes: ${requiredServiceCodes.join(", ")}.`
-          : `Best-match template '${bestMatchTemplateTitle}' expects ${requiredServiceCodes.join(", ")}.`,
+          ? `Required services: ${requiredServiceIds.join(", ")}.`
+          : `Best-match template '${bestMatchTemplateTitle}' expects ${requiredServiceIds.join(", ")}.`,
         evidence: requiredPresentMissingEvidence(
-          "required_service_codes",
-          requiredServiceCodes,
-          serviceCodes,
+          "required_service_ids",
+          requiredServiceIds,
+          serviceIds,
         ),
       }),
       makeRuleResult({
@@ -797,13 +1095,13 @@ function buildSavedEstimateChecks({
             id: "governance.non-default-region-justification",
             title: "Non-Default Region Justification",
             status:
-              expectedRegion && expectedRegion === regions[0]
+              regions.length === 1 && expectedRegion && expectedRegion === regions[0]
                 ? "pass"
                 : hasExplicitRegionJustification
                   ? "pass"
                   : "warning",
             severity:
-              expectedRegion && expectedRegion === regions[0]
+              regions.length === 1 && expectedRegion && expectedRegion === regions[0]
                 ? "info"
                 : hasExplicitRegionJustification
                   ? "info"
@@ -813,19 +1111,19 @@ function buildSavedEstimateChecks({
             remediation:
               "Document latency, residency, compliance, or local-operational reasons when they matter for review.",
             details:
-              expectedRegion && expectedRegion === regions[0]
+              regions.length === 1 && expectedRegion && expectedRegion === regions[0]
                 ? `Region ${regions[0]} was explicitly requested.`
                 : hasExplicitRegionJustification
                   ? "User-authored text includes a non-default region justification."
-                  : `Region ${regions[0]} is non-default. Add context if reviewers need the rationale.`,
+                  : `Non-default regions ${nonDefaultRegions.join(", ")} require documented context when reviewers need the rationale.`,
             evidence: stateSummaryEvidence(
               "non_default_region_justification",
-              expectedRegion && expectedRegion === regions[0]
+              regions.length === 1 && expectedRegion && expectedRegion === regions[0]
                 ? "explicit-region"
                 : hasExplicitRegionJustification
                   ? "justified"
                   : "missing-justification",
-              [regions[0]],
+              nonDefaultRegions,
             ),
           })
         : makeRuleResult({
@@ -857,12 +1155,12 @@ function buildSavedEstimateChecks({
             details: hasWaf
               ? "Edge-facing services include AWS WAF."
               : "Edge-facing services are present without AWS WAF.",
-            evidence: stateSummaryEvidence(
-              "edge_security_controls",
-              hasWaf ? "waf-present" : "waf-missing",
-              serviceCodes.filter((serviceCode) => EDGE_SERVICE_CODES.has(serviceCode)),
-            ),
-          })
+        evidence: stateSummaryEvidence(
+          "edge_security_controls",
+          hasWaf ? "waf-present" : "waf-missing",
+          serviceIds.filter((serviceId) => EDGE_SERVICE_IDS.has(serviceId)),
+        ),
+      })
         : makeRuleResult({
             pack: "platform-governance",
             id: "governance.edge-security-controls",
@@ -1510,29 +1808,30 @@ export function validateEstimatePayload({
   budgetTolerancePct = DEFAULT_BUDGET_TOLERANCE_PCT,
 }) {
   const services = estimate?.services ?? {};
-  const inferredTemplateId = inferTemplateIdFromServices(services);
-  const resolvedTemplateId = templateId ?? (blueprintId ? getBlueprint(blueprintId).templateId : null);
-  const resolvedContextSource =
-    contextSource ??
-    (templateId || blueprintId ? "explicit" : inferredTemplateId ? "inferred" : "none");
-  const resolvedValidationMode =
-    validationMode ??
-    (resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
-      ? "intent-aware"
-      : "generic");
-  const bestMatchTemplateId =
-    resolvedContextSource === "inferred" && inferredTemplateId ? inferredTemplateId : null;
-  const template = getTemplate(resolvedTemplateId ?? bestMatchTemplateId ?? inferredTemplateId);
-  const resolvedBlueprintId =
-    blueprintId ?? (resolvedTemplateId ? resolveBlueprintIdForTemplate(resolvedTemplateId) : null);
-  const blueprint = getBlueprint(
-    resolvedBlueprintId ?? resolveBlueprintIdForTemplate(template.id),
-  );
+  const resolvedContext = resolveValidationContext({
+    services,
+    templateId,
+    blueprintId,
+    patternId,
+    validationMode,
+    contextSource,
+  });
+  const {
+    savedDefinitions,
+    validationMode: resolvedValidationMode,
+    contextSource: resolvedContextSource,
+    blueprint,
+    pattern,
+    template,
+    bestMatch,
+  } = resolvedContext;
   const { checks, parityDetails, modeled } = buildSavedEstimateChecks({
     estimate,
     services,
+    savedDefinitions,
     template,
     blueprint,
+    pattern,
     expectedMonthlyUsd,
     expectedRegion,
     budgetTolerancePct,
@@ -1543,9 +1842,15 @@ export function validateEstimatePayload({
   });
   const assumptions = [];
 
-  if (resolvedContextSource === "inferred" && bestMatchTemplateId) {
+  if (resolvedContextSource === "inferred" && bestMatch?.template?.id) {
     assumptions.push(
-      `Best-match template '${bestMatchTemplateId}' was inferred from the saved service mix for generic validation.`,
+      `Best-match template '${bestMatch.template.id}'${bestMatch.pattern ? ` via pattern '${bestMatch.pattern.id}'` : ""} was inferred from the saved service mix for generic validation.`,
+    );
+  }
+
+  if (resolvedContextSource === "inferred" && bestMatch?.confidence === "low") {
+    assumptions.push(
+      "Saved-service inference confidence is low, so architecture mismatch checks are advisory only.",
     );
   }
 
@@ -1575,25 +1880,28 @@ export function validateEstimatePayload({
     contextSource: resolvedContextSource,
     blueprintId:
       resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
-        ? blueprint.id
+        ? blueprint?.id
         : undefined,
     blueprintTitle:
       resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
-        ? blueprint.title
+        ? blueprint?.title
         : undefined,
     templateId:
       resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
-        ? template.id
+        ? template?.id
         : undefined,
     templateTitle:
       resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
-        ? template.title
+        ? template?.title
         : undefined,
     bestMatchBlueprintId:
-      resolvedContextSource === "inferred" ? blueprint.id : null,
+      resolvedContextSource === "inferred" ? bestMatch?.blueprint?.id ?? null : null,
     bestMatchBlueprintTitle:
-      resolvedContextSource === "inferred" ? blueprint.title : null,
-    patternId: patternId ?? undefined,
+      resolvedContextSource === "inferred" ? bestMatch?.blueprint?.title ?? null : null,
+    patternId:
+      resolvedContextSource === "explicit" || resolvedContextSource === "link-plan"
+        ? pattern?.id
+        : undefined,
     expectedMonthlyUsd:
       expectedMonthlyUsd == null ? null : roundCurrency(Number(expectedMonthlyUsd)),
     storedMonthlyUsd: modeled.storedMonthlyUsd,

@@ -6,6 +6,7 @@ const MCP_PATH = "/mcp";
 const HEALTH_PATH = "/health";
 const INFO_PATH = "/";
 const CORS_ALLOW_HEADERS = [
+  "Authorization",
   "Content-Type",
   "Last-Event-ID",
   "Mcp-Protocol-Version",
@@ -30,6 +31,17 @@ function jsonResponse(data, init = {}) {
     ...init,
     headers,
   });
+}
+
+function configuredBearerToken(env) {
+  const token = String(env?.MCP_BEARER_TOKEN ?? "").trim();
+  return token.length > 0 ? token : null;
+}
+
+function requestBearerToken(request) {
+  const authorization = request.headers.get("authorization");
+  const match = String(authorization ?? "").match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ?? null;
 }
 
 function originHeader(request, env) {
@@ -62,6 +74,25 @@ function withCorsHeaders(response, request, env) {
 
 function optionsResponse(request, env) {
   return withCorsHeaders(new Response(null, { status: 204 }), request, env);
+}
+
+function unauthorizedResponse(request, env) {
+  return withCorsHeaders(
+    jsonResponse(
+      {
+        error: "Unauthorized",
+        details: "Pass Authorization: Bearer <token> when MCP_BEARER_TOKEN is configured.",
+      },
+      {
+        status: 401,
+        headers: {
+          "WWW-Authenticate": "Bearer",
+        },
+      },
+    ),
+    request,
+    env,
+  );
 }
 
 function infoResponse(request, env) {
@@ -136,6 +167,12 @@ export default {
     }
 
     if (url.pathname === MCP_PATH) {
+      const expectedBearerToken = configuredBearerToken(env);
+
+      if (expectedBearerToken && requestBearerToken(request) !== expectedBearerToken) {
+        return unauthorizedResponse(request, env);
+      }
+
       return handleMcpRequest(request, env);
     }
 

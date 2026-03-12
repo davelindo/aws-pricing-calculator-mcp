@@ -37,6 +37,56 @@ test("worker mcp endpoint is open by default", async () => {
   assert.notEqual(response.status, 401);
 });
 
+test("worker enforces bearer auth on the MCP endpoint when configured", async () => {
+  const response = await worker.fetch(
+    new Request("https://example.com/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({}),
+    }),
+    {
+      MCP_BEARER_TOKEN: "top-secret-token",
+    },
+  );
+
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get("WWW-Authenticate"), "Bearer");
+});
+
+test("worker keeps root and health public when bearer auth is configured", async () => {
+  const [rootResponse, healthResponse] = await Promise.all([
+    worker.fetch(new Request("https://example.com/"), {
+      MCP_BEARER_TOKEN: "top-secret-token",
+    }),
+    worker.fetch(new Request("https://example.com/health"), {
+      MCP_BEARER_TOKEN: "top-secret-token",
+    }),
+  ]);
+
+  assert.equal(rootResponse.status, 200);
+  assert.equal(healthResponse.status, 200);
+});
+
+test("worker accepts authorized MCP requests when bearer auth is configured", async () => {
+  const response = await worker.fetch(
+    new Request("https://example.com/mcp", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer top-secret-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({}),
+    }),
+    {
+      MCP_BEARER_TOKEN: "top-secret-token",
+    },
+  );
+
+  assert.notEqual(response.status, 401);
+});
+
 test("worker handles CORS preflight for the MCP endpoint", async () => {
   const response = await worker.fetch(
     new Request("https://example.com/mcp", {
@@ -58,5 +108,9 @@ test("worker handles CORS preflight for the MCP endpoint", async () => {
   assert.match(
     response.headers.get("Access-Control-Allow-Headers") ?? "",
     /Content-Type/,
+  );
+  assert.match(
+    response.headers.get("Access-Control-Allow-Headers") ?? "",
+    /Authorization/,
   );
 });

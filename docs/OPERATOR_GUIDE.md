@@ -4,20 +4,29 @@
 
 - Use `design_architecture` when the input is still fuzzy.
 - Use `price_architecture` when you want scenario comparison.
-- Use `create_calculator_link` only after a scenario is already exact and calculator-eligible.
-- Use `validate_calculator_link` on any saved link that is going to funding review.
+- Use `generate_calculator_link` as the default happy path when the goal is “create the official calculator link now.”
+- Use `create_calculator_link` only after a scenario is already exact and calculator-eligible, usually via `pricingCommit`.
+- Use `validate_calculator_link` to re-check a saved link later or validate an externally created estimate.
 
 ## Practical Patterns
 
-Container baseline:
+One-shot calculator link:
 
 ```json
 {
-  "blueprintId": "container-platform",
-  "region": "us-east-1",
-  "targetMonthlyUsd": 7000
+  "blueprintId": "edge-api-platform",
+  "region": "eu-west-1",
+  "targetMonthlyUsd": 9000
 }
 ```
+
+Call `generate_calculator_link`.
+
+Advanced commit flow:
+
+1. Call `price_architecture`.
+2. Take `scenarios[*].pricingCommit`.
+3. Call `create_calculator_link` with that `pricingCommit`.
 
 Modernization brief:
 
@@ -49,9 +58,10 @@ In `price_architecture`, pay attention to:
 - `deltaDrivers`
 - `calculatorEligible`
 - `calculatorBlockers`
+- `pricingCommit`
 - `validation.blockingFailures`
 
-In `validate_calculator_link`, pay attention to:
+In `generate_calculator_link`, `create_calculator_link`, and `validate_calculator_link`, pay attention to:
 
 - `validation.blockingFailures`
 - `validation.warningRules`
@@ -60,12 +70,14 @@ In `validate_calculator_link`, pay attention to:
 ## Default Operator Rules
 
 - If the user needs a real calculator link now, keep the scenario exact-capable.
+- Prefer `generate_calculator_link` unless you specifically need to compare scenarios or commit a chosen scenario later.
 - Non-default regions should carry explicit justification in the notes or surrounding delivery artifacts.
 - Premium managed services should also carry explicit justification.
+- For hosted Worker deployments, set `MCP_BEARER_TOKEN` and restrict `MCP_ALLOWED_ORIGINS` for browser clients.
 
 ## Exact Coverage
 
-The shipped catalog is exact across all roadmap regions.
+The current shipped catalog is exact across all roadmap regions.
 
 Current exact coverage includes:
 
@@ -77,4 +89,4 @@ Current exact coverage includes:
 - private connectivity: VPC Endpoints / PrivateLink
 - security services: AWS WAF
 
-That coverage is exercised by the live round-trip suite across all six roadmap regions, plus explicit enterprise and modernization add-on cases.
+Treat `list_service_catalog` as the source of truth for per-region support. A future release may surface `modeled` or `unavailable` states for some services without changing the tool shape.

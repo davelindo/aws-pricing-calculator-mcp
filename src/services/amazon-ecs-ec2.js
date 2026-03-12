@@ -8,6 +8,7 @@ import {
 import { buildModeledBudgetPricer, buildRoadmapExactCapability } from "./helpers.js";
 
 const ECS_EC2_DESCRIPTION_PREFIX = "Amazon ECS on EC2 container host baseline.";
+const ECS_EC2_CONFIG_MARKER = "Container orchestration (Amazon ECS on EC2)";
 const ECS_EC2_INSTANCE_TYPES = ["m6i.large", "m6i.xlarge", "m6i.2xlarge"];
 
 function ecsEc2PricingLabel(selectedPricingStrategy) {
@@ -65,7 +66,10 @@ function ecsEc2ShapeForBudget(region, monthlyBudgetUsd, pricingStrategy = {}) {
 export function isEcsEc2SavedService(service) {
   return (
     service?.serviceCode === "ec2Enhancement" &&
-    String(service?.description ?? "").includes(ECS_EC2_DESCRIPTION_PREFIX)
+    (
+      String(service?.configSummary ?? "").includes(ECS_EC2_CONFIG_MARKER) ||
+      String(service?.description ?? "").includes(ECS_EC2_DESCRIPTION_PREFIX)
+    )
   );
 }
 

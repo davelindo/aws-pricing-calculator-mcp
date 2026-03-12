@@ -320,6 +320,34 @@ test("priceArchitecture recommends the scenario closest to the requested target"
   assert.equal(priced.recommendedScenarioId, "baseline");
 });
 
+test("priceArchitecture recovers cleanly when the requested container budget is below minimum", () => {
+  const priced = priceArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 1600,
+    includeDefaultAddOns: false,
+  });
+  const baseline = getScenario(priced);
+
+  assert.ok(baseline);
+  assert.equal(baseline.modeledMonthlyUsd > 0, true);
+  assert.equal(baseline.calculatorBlockers.length, 0);
+  assert.equal(baseline.budgetFit.status, "nearest_fit_above");
+});
+
+test("priceArchitecture does not throw at the minimum-budget fallback boundary", () => {
+  const priced = priceArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 1634.1,
+    includeDefaultAddOns: false,
+  });
+  const baseline = getScenario(priced);
+
+  assert.ok(baseline);
+  assert.equal(baseline.modeledMonthlyUsd > 0, true);
+});
+
 test("designArchitecture returns structured unresolved questions when key inputs are missing", () => {
   const architecture = designArchitecture({
     brief: "Need a modernization landing zone and migration path with compliance controls.",

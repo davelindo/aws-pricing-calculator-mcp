@@ -123,6 +123,18 @@ test("tool action metadata stays compact enough for chat client refresh limits",
   }
 });
 
+test("README documents the frozen v1 tool surface and both transports", async () => {
+  const readme = await fs.readFile(path.resolve(__dirname, "../README.md"), "utf8");
+
+  for (const toolName of TOOL_NAMES) {
+    assert.match(readme, new RegExp(`\`${toolName}\``));
+  }
+
+  assert.match(readme, /stdio/i);
+  assert.match(readme, /streamable-http/i);
+  assert.match(readme, /generate_calculator_link/i);
+});
+
 test("design_architecture returns the canonical v1 shape without leaked internal policy fields", async (t) => {
   const client = await createTestClient(t);
   const result = await client.callTool({

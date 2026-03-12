@@ -4,6 +4,8 @@ Remote MCP endpoint:
 
 `https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp`
 
+These snippets assume the Worker does not require bearer auth. If you set `MCP_BEARER_TOKEN`, configure `Authorization: Bearer <token>` in the client or terminate auth at a reverse proxy.
+
 ## Claude
 
 ### Claude / Claude Desktop
@@ -14,7 +16,7 @@ For Claude and Claude Desktop, add this MCP as a custom remote connector:
 2. Click `Add custom connector`
 3. Name it `AWS Pricing Calculator`
 4. Set the URL to `https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp`
-5. Leave OAuth settings empty for this deployment
+5. Leave OAuth settings empty for this deployment unless you are fronting the Worker with your own auth layer
 6. Click `Add`
 
 Notes:

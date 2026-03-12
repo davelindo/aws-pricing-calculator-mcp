@@ -2,9 +2,9 @@
 
 ![Version](https://img.shields.io/badge/version-4.0.0-2563eb)
 ![Node >=18](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)
-![MCP](https://img.shields.io/badge/MCP-stdio-7c3aed)
+![MCP](https://img.shields.io/badge/MCP-stdio%20%7C%20streamable--http-7c3aed)
 
-`aws-pricing-calculator-mcp` is an MCP server for designing AWS architectures, pricing scenarios, creating official AWS Pricing Calculator share links, and validating the saved estimate for funding-oriented review.
+`aws-pricing-calculator-mcp` is an MCP server for designing AWS architectures, pricing scenarios, creating official AWS Pricing Calculator share links, and validating the saved estimate for funding-oriented review. It runs locally over stdio and also ships a Cloudflare Worker for remote `streamable-http` deployments.
 
 ## What This Project Does
 
@@ -15,7 +15,7 @@ This project helps an MCP client turn an architecture brief or blueprint into:
 - an official `https://calculator.aws/#/estimate?id=...` share link
 - validation results against what AWS actually saved
 
-The server runs over stdio and exposes these tools:
+The server exposes these tools:
 
 | Tool | Purpose |
 | --- | --- |
@@ -23,7 +23,8 @@ The server runs over stdio and exposes these tools:
 | `list_service_catalog` | Inspect service coverage and region support |
 | `design_architecture` | Turn a brief or blueprint into a normalized architecture |
 | `price_architecture` | Price one or more scenario policies |
-| `create_calculator_link` | Save an exact scenario and return the official calculator link |
+| `generate_calculator_link` | Default one-shot path: design or price inputs, choose a scenario, create the official link, and validate it |
+| `create_calculator_link` | Advanced path: commit a previously priced exact scenario, usually via its `pricingCommit` handle |
 | `validate_calculator_link` | Fetch a saved estimate and validate it |
 
 ## Why It Is Useful
@@ -65,7 +66,7 @@ npm install
 npm run check
 ```
 
-### Run The MCP Server
+### Run Locally Over stdio
 
 ```bash
 npm start
@@ -76,6 +77,20 @@ Or run the executable directly:
 ```bash
 node bin/aws-pricing-calculator-mcp.js
 ```
+
+### Run Remotely Over streamable-http
+
+```bash
+npm run worker:dev
+```
+
+Deploy the Cloudflare Worker:
+
+```bash
+npm run worker:deploy
+```
+
+If you set `MCP_BEARER_TOKEN`, remote clients must send `Authorization: Bearer <token>` to `/mcp`.
 
 ### MCP Client Configuration
 
@@ -93,9 +108,24 @@ Example stdio configuration:
 }
 ```
 
+Example remote configuration:
+
+```json
+{
+  "mcpServers": {
+    "awsPricingCalculator": {
+      "type": "streamable-http",
+      "url": "https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp"
+    }
+  }
+}
+```
+
+If the Worker enables `MCP_BEARER_TOKEN`, configure an equivalent bearer-auth header in your client or proxy.
+
 ### Typical Workflow
 
-1. List available blueprints.
+1. Discover the blueprint catalog when the workload shape is still open.
 
 ```json
 {}
@@ -103,7 +133,7 @@ Example stdio configuration:
 
 Call `list_blueprints`.
 
-2. Design from a brief.
+2. Design from a brief when the input is still fuzzy.
 
 ```json
 {
@@ -113,7 +143,7 @@ Call `list_blueprints`.
 
 Call `design_architecture`.
 
-3. Price scenarios.
+3. Use `generate_calculator_link` as the default one-shot path when the goal is “get me the official link now.”
 
 ```json
 {
@@ -123,13 +153,17 @@ Call `design_architecture`.
 }
 ```
 
-Call `price_architecture`.
+Call `generate_calculator_link`.
 
-4. Create the calculator link from the returned exact scenario.
+This prices the request, selects the scenario, saves the official AWS estimate, and returns inline validation for the saved result.
 
-Pass one of the `scenarios[*]` objects from `price_architecture` into `create_calculator_link` as `pricedScenario`.
+4. Use `price_architecture` when you want scenario comparison or a `pricingCommit` handle for advanced flows.
 
-5. Validate the saved estimate later by share link or estimate id.
+5. Use `create_calculator_link` when you already have a priced exact scenario and want to commit it explicitly.
+
+Pass `pricingCommit` from `price_architecture` as the canonical input. `pricedScenario` is still accepted for compatibility.
+
+6. Use `validate_calculator_link` later to re-validate a saved estimate by share link or estimate id.
 
 ```json
 {
@@ -166,6 +200,7 @@ Runs the live save/fetch parity matrix against AWS calculator endpoints.
 | Path | Purpose |
 | --- | --- |
 | `src/server.js` | MCP tool registration and schemas |
+| `src/worker.js` | Cloudflare Worker transport for `streamable-http` |
 | `src/architecture.js` | architecture design, scenario pricing, exact link planning |
 | `src/planner.js` | estimate construction helpers used by the MCP surface |
 | `src/validation.js` | saved-estimate validation and policy checks |
@@ -183,6 +218,7 @@ The `v1` MCP surface is frozen at these tool names:
 - `list_service_catalog`
 - `design_architecture`
 - `price_architecture`
+- `generate_calculator_link`
 - `create_calculator_link`
 - `validate_calculator_link`
 

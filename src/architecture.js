@@ -1979,12 +1979,21 @@ function buildCoreScenario({
       0,
     ),
   );
-  const minimumModeledSpendUsd = roundCurrency(
+  const minimumComputePlan = buildComputePlan(
+    exactRegion,
+    selectedOperatingSystem,
+    1,
+    weightedEnvironmentSplit,
+  );
+  const fixedCoreMonthlyUsd = roundCurrency(
     fixedEksMonthlyUsd + fixedRdsMonthlyUsd + natPlan.monthlyUsd,
   );
-  const targetComputeBudgetUsd = roundCurrency(targetMonthlyUsd - minimumModeledSpendUsd);
+  const minimumModeledSpendUsd = roundCurrency(
+    fixedCoreMonthlyUsd + minimumComputePlan.monthlyUsd,
+  );
+  const targetComputeBudgetUsd = roundCurrency(targetMonthlyUsd - fixedCoreMonthlyUsd);
 
-  if (targetComputeBudgetUsd <= 0) {
+  if (targetComputeBudgetUsd < 0) {
     throw new Error(
       `targetMonthlyUsd is too low for the minimum viable '${template.id}' baseline in ${exactRegion}. Minimum modeled spend is ${minimumModeledSpendUsd.toFixed(2)} USD/month.`,
     );
@@ -1993,7 +2002,7 @@ function buildCoreScenario({
   const computePlan = buildComputePlan(
     exactRegion,
     selectedOperatingSystem,
-    targetComputeBudgetUsd,
+    Math.max(targetComputeBudgetUsd, minimumComputePlan.monthlyUsd),
     weightedEnvironmentSplit,
   );
   const eksService = getServiceDefinition("amazon-eks");
@@ -2832,24 +2841,30 @@ export function priceArchitecture(input = {}) {
         const minimumBudgetUsd = parseMinimumBudgetUsd(message);
 
         if (minimumBudgetUsd && minimumBudgetUsd > coreBudget) {
-          coreScenario = buildCoreScenario({
-            profile: architectureProfile,
-            region: architecture.region,
-            targetMonthlyUsd: minimumBudgetUsd,
-            environmentSplit: architecture.environmentSplit,
-            estimateName: scenarioEstimateName(architecture.estimateName, policy),
-            notes: architecture.notes,
-            operatingSystem: architecture.operatingSystem,
-            policy,
-          });
-          coreBreakdown = coreScenario.breakdown;
-          modeledMonthlyUsd = roundCurrency(addOnTotal + totalBreakdownMonthlyUsd(coreBreakdown));
-          draftValidation = coreScenario.validation;
-          budgetFitOverride = {
-            status: "nearest_fit_above",
-            deltaUsd: roundCurrency(modeledMonthlyUsd - targetMonthlyUsd),
-            details: `Target ${targetMonthlyUsd.toFixed(2)} USD is below the minimum viable architecture shape. Sized the nearest valid scenario at ${modeledMonthlyUsd.toFixed(2)} USD.`,
-          };
+          try {
+            coreScenario = buildCoreScenario({
+              profile: architectureProfile,
+              region: architecture.region,
+              targetMonthlyUsd: minimumBudgetUsd,
+              environmentSplit: architecture.environmentSplit,
+              estimateName: scenarioEstimateName(architecture.estimateName, policy),
+              notes: architecture.notes,
+              operatingSystem: architecture.operatingSystem,
+              policy,
+            });
+            coreBreakdown = coreScenario.breakdown;
+            modeledMonthlyUsd = roundCurrency(addOnTotal + totalBreakdownMonthlyUsd(coreBreakdown));
+            draftValidation = coreScenario.validation;
+            budgetFitOverride = {
+              status: "nearest_fit_above",
+              deltaUsd: roundCurrency(modeledMonthlyUsd - targetMonthlyUsd),
+              details: `Target ${targetMonthlyUsd.toFixed(2)} USD is below the minimum viable architecture shape. Sized the nearest valid scenario at ${modeledMonthlyUsd.toFixed(2)} USD.`,
+            };
+          } catch (retryError) {
+            calculatorBlockers.push(
+              retryError instanceof Error ? retryError.message : String(retryError),
+            );
+          }
         } else {
           calculatorBlockers.push(message);
         }
@@ -3008,6 +3023,8 @@ export function buildExactEstimateFromLinkPlan(linkPlan) {
   const validation = validateEstimatePayload({
     estimate,
     templateId: architectureProfile.templateId,
+    blueprintId: linkPlan.blueprintId,
+    patternId: linkPlan.patternId,
     expectedMonthlyUsd: linkPlan.targetMonthlyUsd,
     expectedRegion: linkPlan.region,
   });

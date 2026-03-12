@@ -2,6 +2,8 @@
 
 This matrix is sourced from the MCP service registry in `src/services/index.js`. It reflects the compatibility surface exposed by `list_service_catalog`.
 
+Consumers should treat the per-region capability matrix as the source of truth. A shipped service may be `exact`, `modeled`, or `unavailable` by region over time; the current snapshot happens to be fully exact.
+
 ## Legend
 
 - `exact`: calculator serialization, save, and validation are supported in that roadmap region
@@ -13,7 +15,7 @@ This matrix is sourced from the MCP service registry in `src/services/index.js`.
 - Total services: 35
 - Implemented: 35
 - Modeled only: 0
-- Planned only: 0
+- Unavailable in any roadmap region: 0
 
 ## Matrix
 

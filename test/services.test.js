@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { getTemplate, listServiceCatalog } from "../src/catalog.js";
 import { buildComputePlan, buildNatPlan } from "../src/model.js";
+import { buildCapabilityMatrix } from "../src/services/helpers.js";
 import {
   TARGET_REGIONS,
   findServiceDefinitionByCalculatorServiceCode,
@@ -54,22 +55,53 @@ const DEFAULT_ENVIRONMENT_SPLIT = {
   prod: 0.5,
 };
 const ECS_EC2_SERVICE_ID = "amazon-ecs-ec2";
-const ACTIVE_IMPLEMENTATION_STATUSES = new Set(["implemented"]);
+const ACTIVE_IMPLEMENTATION_STATUSES = new Set(["implemented", "modeled"]);
 
-function assertExactCatalogEntry(service) {
+function assertCatalogEntryCapabilities(service) {
   assert.ok(service.calculatorServiceCodes.length > 0, `${service.id} should expose service codes`);
-  assert.ok(
-    service.capabilityMatrix.every((entry) => entry.support === "exact"),
-    `${service.id} should be exact in every roadmap region`,
-  );
-  assert.ok(
-    service.capabilityMatrix.every((entry) => entry.calculatorSaveSupported === true),
-    `${service.id} should be calculator-save capable in every roadmap region`,
-  );
-  assert.ok(
-    service.capabilityMatrix.every((entry) => entry.validationSupported === true),
-    `${service.id} should be validation-capable in every roadmap region`,
-  );
+
+  for (const capability of service.capabilityMatrix) {
+    assert.ok(TARGET_REGIONS.includes(capability.region), `${service.id} unsupported region entry`);
+
+    if (capability.support === "exact") {
+      assert.equal(
+        capability.calculatorSaveSupported,
+        true,
+        `${service.id} exact entries should be calculator-save capable`,
+      );
+      assert.equal(
+        capability.validationSupported,
+        true,
+        `${service.id} exact entries should be validation-capable`,
+      );
+      continue;
+    }
+
+    if (capability.support === "modeled") {
+      assert.equal(
+        capability.calculatorSaveSupported,
+        false,
+        `${service.id} modeled entries should not be calculator-save capable`,
+      );
+      assert.equal(
+        capability.validationSupported,
+        true,
+        `${service.id} modeled entries should remain validation-capable`,
+      );
+      continue;
+    }
+
+    assert.equal(
+      capability.calculatorSaveSupported,
+      false,
+      `${service.id} unavailable entries should not be calculator-save capable`,
+    );
+    assert.equal(
+      capability.validationSupported,
+      false,
+      `${service.id} unavailable entries should not be validation-capable`,
+    );
+  }
 }
 
 function buildServiceEntry(definition, region, monthlyBudgetUsd) {
@@ -127,7 +159,7 @@ function buildServiceEntry(definition, region, monthlyBudgetUsd) {
   }
 }
 
-test("service registry exposes an all-exact shipped service surface", () => {
+test("service registry exposes supported regions directly from capability state", () => {
   const catalog = listServiceCatalog();
 
   assert.ok(catalog.length > 0);
@@ -142,8 +174,14 @@ test("service registry exposes an all-exact shipped service surface", () => {
       TARGET_REGIONS.length,
       `${service.id} region count`,
     );
-    assert.deepEqual(service.supportedRegions, TARGET_REGIONS, `${service.id} supported regions`);
-    assertExactCatalogEntry(service);
+    assert.deepEqual(
+      service.supportedRegions,
+      service.capabilityMatrix
+        .filter((entry) => entry.support !== "unavailable")
+        .map((entry) => entry.region),
+      `${service.id} supported regions`,
+    );
+    assertCatalogEntryCapabilities(service);
   }
 });
 
@@ -164,7 +202,7 @@ test("service registry maps unique calculator service codes back to their canoni
   }
 });
 
-test("saved ec2Enhancement entries resolve to either EC2 or ECS on EC2 based on their description", () => {
+test("saved ec2Enhancement entries resolve to either EC2 or ECS on EC2 from stable markers", () => {
   const ec2 = getServiceDefinition("amazon-ec2");
   const ecsEc2 = getServiceDefinition(ECS_EC2_SERVICE_ID);
   const ec2Entry = ec2.buildEntry({
@@ -184,29 +222,79 @@ test("saved ec2Enhancement entries resolve to either EC2 or ECS on EC2 based on 
   assert.equal(resolveServiceDefinitionForSavedService(ec2Entry.service)?.id, "amazon-ec2");
   assert.equal(resolveServiceDefinitionForSavedService(ecsEntry.service)?.id, ECS_EC2_SERVICE_ID);
   assert.equal(findServiceDefinitionByCalculatorServiceCode("ec2Enhancement")?.id, "amazon-ec2");
+  assert.match(ecsEntry.service.configSummary, /Container orchestration \(Amazon ECS on EC2\)/);
 });
 
-test("public service catalog omits implementation functions and keeps the exact surface", () => {
+test("public service catalog omits implementation functions and keeps capability state", () => {
   for (const service of listServiceCatalog()) {
     assert.equal("buildEntry" in service, false);
     assert.equal("modelSavedMonthlyUsd" in service, false);
     assert.equal("priceBudget" in service, false);
     assert.ok(ACTIVE_IMPLEMENTATION_STATUSES.has(service.implementationStatus));
-    assert.deepEqual(service.supportedRegions, TARGET_REGIONS);
+    assert.deepEqual(
+      service.supportedRegions,
+      service.capabilityMatrix
+        .filter((entry) => entry.support !== "unavailable")
+        .map((entry) => entry.region),
+    );
   }
+});
+
+test("capability matrices preserve exact, modeled, and unavailable semantics", () => {
+  const matrix = buildCapabilityMatrix({
+    exact: ["us-east-1"],
+    modeled: ["eu-west-1"],
+    unavailable: ["sa-east-1"],
+  });
+
+  assert.deepEqual(
+    matrix.find((entry) => entry.region === "us-east-1"),
+    {
+      region: "us-east-1",
+      support: "exact",
+      calculatorSaveSupported: true,
+      validationSupported: true,
+      reason: "Service is calculator-save capable and parity-verified in this region.",
+    },
+  );
+  assert.deepEqual(
+    matrix.find((entry) => entry.region === "eu-west-1"),
+    {
+      region: "eu-west-1",
+      support: "modeled",
+      calculatorSaveSupported: false,
+      validationSupported: true,
+      reason: "Service is priced for planning in this region, but calculator save/parity is not complete yet.",
+    },
+  );
+  assert.deepEqual(
+    matrix.find((entry) => entry.region === "sa-east-1"),
+    {
+      region: "sa-east-1",
+      support: "unavailable",
+      calculatorSaveSupported: false,
+      validationSupported: false,
+      reason: "Service is not implemented for this region yet.",
+    },
+  );
 });
 
 test("exact shipped service modules price budgets and round-trip through their saved-cost models", () => {
   const catalog = listServiceCatalog();
 
-  for (const [index, serviceEntry] of catalog.entries()) {
+  for (const serviceEntry of catalog) {
     if (serviceEntry.implementationStatus !== "implemented") {
       continue;
     }
 
     const definition = getServiceDefinition(serviceEntry.id);
-    const region = TARGET_REGIONS[index % TARGET_REGIONS.length];
-    const capability = definition.capabilityMatrix.find((entry) => entry.region === region);
+    const capability = definition.capabilityMatrix.find((entry) => entry.support === "exact");
+
+    if (!capability) {
+      continue;
+    }
+
+    const region = capability.region;
     const monthlyBudgetUsd = SERVICE_BUDGETS[serviceEntry.id] ?? 100;
     const priced = definition.priceBudget({
       definition,

@@ -21,7 +21,7 @@ const BLUEPRINT_TARGETS = {
   "modernization-platform": 12000,
 };
 
-test("designArchitecture keeps every shipped blueprint exact across the roadmap regions", () => {
+test("designArchitecture keeps every shipped blueprint priceable across the roadmap regions", () => {
   for (const [blueprintId, targetMonthlyUsd] of Object.entries(BLUEPRINT_TARGETS)) {
     for (const region of ROADMAP_REGIONS) {
       const architecture = designArchitecture({
@@ -31,11 +31,6 @@ test("designArchitecture keeps every shipped blueprint exact across the roadmap 
       });
 
       assert.equal(architecture.readyToPrice, true, `${blueprintId} in ${region} should price`);
-      assert.deepEqual(
-        architecture.serviceCoverage.modeled,
-        [],
-        `${blueprintId} in ${region} should not contain modeled services`,
-      );
       assert.deepEqual(
         architecture.serviceCoverage.unavailable,
         [],
@@ -166,7 +161,23 @@ test("buildCalculatorEstimateFromScenario rejects scenarios without an exact lin
           id: "manual",
           calculatorBlockers: ["missing exact serializer coverage"],
         },
-      }),
+    }),
     /Unable to create estimate: missing exact serializer coverage/,
   );
+});
+
+test("priceArchitecture returns nearest valid scenarios instead of throwing for under-budget requests", () => {
+  const priced = priceArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 1600,
+  });
+  const baseline = getScenario(priced);
+
+  assert.ok(baseline);
+  assert.equal(baseline.modeledMonthlyUsd > 0, true);
+  assert.equal(baseline.calculatorEligible, true);
+  assert.equal(baseline.calculatorBlockers.length, 0);
+  assert.equal(baseline.budgetFit.status, "nearest_fit_above");
+  assert.match(baseline.budgetFit.details, /minimum viable architecture shape/i);
 });

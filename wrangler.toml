@@ -9,3 +9,4 @@ enabled = true
 
 [vars]
 MCP_ALLOWED_ORIGINS = ""
+MCP_BEARER_TOKEN = ""

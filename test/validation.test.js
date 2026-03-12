@@ -105,7 +105,82 @@ test("validateEstimatePayload infers windows-heavy from saved services", () => {
   assert.equal(validation.passed, true);
   assert.ok(
     validation.assumptions.some((assumption) =>
-      assumption.includes("Best-match template 'windows-heavy'"),
+      assumption.includes("Best-match template '"),
+    ),
+  );
+});
+
+test("validateEstimatePayload respects explicit edge pattern context", () => {
+  const priced = priceArchitecture({
+    blueprintId: "edge-api-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 9000,
+  });
+  const baseline = getScenario(priced);
+  const created = buildCalculatorEstimateFromScenario({
+    pricedScenario: baseline,
+  });
+
+  const validation = validateEstimatePayload({
+    estimate: created.estimate,
+    blueprintId: "edge-api-platform",
+    patternId: "serverless-edge-api",
+    expectedRegion: "us-east-1",
+  });
+
+  assert.equal(validation.passed, true);
+  assert.equal(validation.patternId, "serverless-edge-api");
+  assert.equal(validation.blockingFailures.length, 0);
+});
+
+test("validateEstimatePayload enforces the explicit edge pattern that was requested", () => {
+  const priced = priceArchitecture({
+    blueprintId: "edge-api-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 9000,
+  });
+  const baseline = getScenario(priced);
+  const created = buildCalculatorEstimateFromScenario({
+    pricedScenario: baseline,
+  });
+
+  const validation = validateEstimatePayload({
+    estimate: created.estimate,
+    blueprintId: "edge-api-platform",
+    patternId: "private-api-front-door",
+    expectedRegion: "us-east-1",
+  });
+
+  assert.equal(validation.passed, false);
+  assert.ok(
+    validation.blockingFailures.some((failure) => failure.id === "architecture.required-service-codes"),
+  );
+  assert.ok(
+    validation.blockingFailures.some((failure) => failure.id === "architecture.required-service-families"),
+  );
+});
+
+test("validateEstimatePayload infers edge-api-platform from saved edge services", () => {
+  const priced = priceArchitecture({
+    blueprintId: "edge-api-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 9000,
+  });
+  const baseline = getScenario(priced);
+  const created = buildCalculatorEstimateFromScenario({
+    pricedScenario: baseline,
+  });
+
+  const validation = validateEstimatePayload({
+    estimate: created.estimate,
+  });
+
+  assert.equal(validation.validationMode, "generic");
+  assert.equal(validation.contextSource, "inferred");
+  assert.equal(validation.bestMatchBlueprintId, "edge-api-platform");
+  assert.ok(
+    validation.assumptions.some((assumption) =>
+      assumption.includes("Best-match template 'edge-api-serverless-standard'"),
     ),
   );
 });
@@ -175,6 +250,26 @@ test("validateEstimatePayload does not block explicit non-default regions", () =
   );
   assert.equal(regionRule?.status, "pass");
   assert.equal(regionRule?.blocking, false);
+});
+
+test("validateEstimatePayload warns when any saved service drifts to a non-default region", () => {
+  const created = buildExactContainerEstimate();
+  const estimate = structuredClone(created.estimate);
+  const firstKey = Object.keys(estimate.services)[0];
+
+  estimate.services[firstKey].region = "eu-west-1";
+  estimate.services[firstKey].regionName = "Europe (Ireland)";
+
+  const validation = validateEstimatePayload({
+    estimate,
+  });
+  const regionRule = validation.checks.find(
+    (check) => check.id === "governance.non-default-region-justification",
+  );
+
+  assert.equal(regionRule?.status, "warning");
+  assert.equal(regionRule?.blocking, false);
+  assert.equal(regionRule?.details.includes("eu-west-1"), true);
 });
 
 test("scenario validation emits typed evidence for key architecture and funding checks", () => {
