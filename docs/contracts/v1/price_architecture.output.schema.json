@@ -2784,6 +2784,488 @@
               }
             ]
           },
+          "pricingCommit": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "contractVersion": {
+                    "type": "string",
+                    "const": "v1"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "pricing_commit"
+                  },
+                  "architectureId": {
+                    "type": "string"
+                  },
+                  "blueprintId": {
+                    "type": "string",
+                    "enum": [
+                      "container-platform",
+                      "linux-web-stack",
+                      "windows-app-stack",
+                      "edge-api-platform",
+                      "event-driven-platform",
+                      "data-platform-lite",
+                      "modernization-platform",
+                      "enterprise-data-platform",
+                      "enterprise-data-lake",
+                      "lake-foundation",
+                      "lakehouse-platform",
+                      "streaming-data-platform",
+                      "warehouse-centric-analytics"
+                    ]
+                  },
+                  "patternId": {
+                    "type": "string",
+                    "enum": [
+                      "eks-app-platform",
+                      "eks-api-front-door",
+                      "eks-private-service",
+                      "eks-search-content-platform",
+                      "container-platform.default",
+                      "ec2-web-with-postgres",
+                      "ec2-web-with-cdn",
+                      "ec2-web-with-private-service",
+                      "linux-web-stack.default",
+                      "windows-iis-with-postgres",
+                      "windows-iis-with-sqlserver",
+                      "windows-files-app",
+                      "windows-private-sql-service",
+                      "windows-app-stack.default",
+                      "serverless-edge-api",
+                      "cloudfront-alb-origin-app",
+                      "private-api-front-door",
+                      "edge-api-platform.default",
+                      "async-worker-platform",
+                      "pubsub-fanout-platform",
+                      "event-bus-integration-platform",
+                      "event-driven-platform.default",
+                      "data-platform-lite.default",
+                      "hybrid-transition-state",
+                      "ecs-fargate-target-state",
+                      "modernization-platform.default",
+                      "enterprise-data-platform.default",
+                      "enterprise-data-lake.default",
+                      "lake-foundation-basic",
+                      "lake-foundation-governed",
+                      "lake-foundation.default",
+                      "lakehouse-serving",
+                      "lakehouse-platform.default",
+                      "stream-analytics-platform",
+                      "streaming-data-platform.default",
+                      "redshift-bi-warehouse",
+                      "warehouse-centric-analytics.default"
+                    ]
+                  },
+                  "scenarioId": {
+                    "type": "string"
+                  },
+                  "scenarioTitle": {
+                    "type": "string"
+                  },
+                  "modeledMonthlyUsd": {
+                    "type": "number"
+                  },
+                  "targetMonthlyUsd": {
+                    "type": "number"
+                  },
+                  "strategySummary": {
+                    "type": "string"
+                  },
+                  "linkPlan": {
+                    "type": "object",
+                    "properties": {
+                      "blueprintId": {
+                        "type": "string",
+                        "enum": [
+                          "container-platform",
+                          "linux-web-stack",
+                          "windows-app-stack",
+                          "edge-api-platform",
+                          "event-driven-platform",
+                          "data-platform-lite",
+                          "modernization-platform",
+                          "enterprise-data-platform",
+                          "enterprise-data-lake",
+                          "lake-foundation",
+                          "lakehouse-platform",
+                          "streaming-data-platform",
+                          "warehouse-centric-analytics"
+                        ]
+                      },
+                      "patternId": {
+                        "type": "string",
+                        "enum": [
+                          "eks-app-platform",
+                          "eks-api-front-door",
+                          "eks-private-service",
+                          "eks-search-content-platform",
+                          "container-platform.default",
+                          "ec2-web-with-postgres",
+                          "ec2-web-with-cdn",
+                          "ec2-web-with-private-service",
+                          "linux-web-stack.default",
+                          "windows-iis-with-postgres",
+                          "windows-iis-with-sqlserver",
+                          "windows-files-app",
+                          "windows-private-sql-service",
+                          "windows-app-stack.default",
+                          "serverless-edge-api",
+                          "cloudfront-alb-origin-app",
+                          "private-api-front-door",
+                          "edge-api-platform.default",
+                          "async-worker-platform",
+                          "pubsub-fanout-platform",
+                          "event-bus-integration-platform",
+                          "event-driven-platform.default",
+                          "data-platform-lite.default",
+                          "hybrid-transition-state",
+                          "ecs-fargate-target-state",
+                          "modernization-platform.default",
+                          "enterprise-data-platform.default",
+                          "enterprise-data-lake.default",
+                          "lake-foundation-basic",
+                          "lake-foundation-governed",
+                          "lake-foundation.default",
+                          "lakehouse-serving",
+                          "lakehouse-platform.default",
+                          "stream-analytics-platform",
+                          "streaming-data-platform.default",
+                          "redshift-bi-warehouse",
+                          "warehouse-centric-analytics.default"
+                        ]
+                      },
+                      "scenarioId": {
+                        "type": "string"
+                      },
+                      "templateId": {
+                        "type": "string",
+                        "enum": [
+                          "eks-rds-standard",
+                          "linux-heavy",
+                          "windows-heavy",
+                          "edge-api-serverless-standard",
+                          "edge-origin-platform-standard",
+                          "private-api-front-door-standard",
+                          "event-driven-standard",
+                          "modernization-fargate-standard",
+                          "windows-sqlserver-standard",
+                          "windows-files-standard",
+                          "container-api-front-door-standard",
+                          "container-private-service-standard",
+                          "container-search-content-standard",
+                          "linux-web-cdn-standard",
+                          "linux-web-private-standard",
+                          "lake-foundation-standard",
+                          "lakehouse-platform-standard",
+                          "streaming-data-platform-standard",
+                          "warehouse-centric-analytics-standard",
+                          "enterprise-data-lake-standard",
+                          "data-platform-standard",
+                          "enterprise-data-standard"
+                        ]
+                      },
+                      "targetMonthlyUsd": {
+                        "type": "number"
+                      },
+                      "coreTargetMonthlyUsd": {
+                        "type": "number"
+                      },
+                      "region": {
+                        "type": "string"
+                      },
+                      "estimateName": {
+                        "type": "string"
+                      },
+                      "notes": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "environmentSplit": {
+                        "type": "object",
+                        "properties": {
+                          "dev": {
+                            "type": "number"
+                          },
+                          "staging": {
+                            "type": "number"
+                          },
+                          "prod": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "dev",
+                          "staging",
+                          "prod"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "operatingSystem": {
+                        "type": "string",
+                        "enum": [
+                          "linux",
+                          "windows"
+                        ]
+                      },
+                      "scenarioPolicy": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "computeCommitment": {
+                            "type": "string",
+                            "enum": [
+                              "on-demand",
+                              "savings-plans",
+                              "reserved",
+                              "reserved-heavy"
+                            ]
+                          },
+                          "computeDiscountPct": {
+                            "type": "number"
+                          },
+                          "databaseCommitment": {
+                            "type": "string",
+                            "enum": [
+                              "on-demand",
+                              "reserved",
+                              "reserved-heavy"
+                            ]
+                          },
+                          "databaseDiscountPct": {
+                            "type": "number"
+                          },
+                          "haPosture": {
+                            "type": "string",
+                            "enum": [
+                              "standard",
+                              "targeted-ha",
+                              "selective-ha"
+                            ]
+                          },
+                          "prodMultiAz": {
+                            "type": "boolean"
+                          },
+                          "nonProdMultiAz": {
+                            "type": "boolean"
+                          },
+                          "storageStrategy": {
+                            "type": "string",
+                            "enum": [
+                              "standard",
+                              "tuned",
+                              "lean"
+                            ]
+                          },
+                          "storageMultiplier": {
+                            "type": "number"
+                          },
+                          "environmentSizing": {
+                            "type": "string",
+                            "enum": [
+                              "full-footprint",
+                              "right-sized-non-prod",
+                              "lean-non-prod"
+                            ]
+                          },
+                          "environmentScaleFactors": {
+                            "type": "object",
+                            "properties": {
+                              "dev": {
+                                "type": "number"
+                              },
+                              "staging": {
+                                "type": "number"
+                              },
+                              "prod": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "dev",
+                              "staging",
+                              "prod"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "sharedServicesProfile": {
+                            "type": "string",
+                            "enum": [
+                              "standard",
+                              "trimmed",
+                              "lean"
+                            ]
+                          },
+                          "sharedServicesMultiplier": {
+                            "type": "number"
+                          },
+                          "dataTransferProfile": {
+                            "type": "string",
+                            "enum": [
+                              "baseline",
+                              "reviewed",
+                              "minimized"
+                            ]
+                          },
+                          "dataTransferMultiplier": {
+                            "type": "number"
+                          },
+                          "justificationProfile": {
+                            "type": "string",
+                            "enum": [
+                              "default-baseline",
+                              "cost-optimized",
+                              "high-optimization"
+                            ]
+                          },
+                          "expectedSavingsPct": {
+                            "type": "number"
+                          },
+                          "coreBudgetFactor": {
+                            "type": "number"
+                          },
+                          "addOnBudgetFactor": {
+                            "type": "number"
+                          },
+                          "strategySummary": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "computeCommitment",
+                          "computeDiscountPct",
+                          "databaseCommitment",
+                          "databaseDiscountPct",
+                          "haPosture",
+                          "prodMultiAz",
+                          "nonProdMultiAz",
+                          "storageStrategy",
+                          "storageMultiplier",
+                          "environmentSizing",
+                          "environmentScaleFactors",
+                          "sharedServicesProfile",
+                          "sharedServicesMultiplier",
+                          "dataTransferProfile",
+                          "dataTransferMultiplier",
+                          "justificationProfile",
+                          "expectedSavingsPct",
+                          "coreBudgetFactor",
+                          "addOnBudgetFactor",
+                          "strategySummary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "exactAddOns": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "serviceId": {
+                              "type": "string",
+                              "enum": [
+                                "amazon-eks",
+                                "amazon-ec2",
+                                "amazon-athena",
+                                "amazon-redshift",
+                                "aws-glue-etl",
+                                "aws-glue-data-catalog",
+                                "aws-glue-crawlers",
+                                "amazon-kinesis-firehose",
+                                "amazon-rds-postgresql",
+                                "amazon-rds-mysql",
+                                "amazon-rds-sqlserver",
+                                "amazon-aurora-postgresql",
+                                "amazon-aurora-mysql",
+                                "amazon-elasticache-redis",
+                                "amazon-vpc-nat",
+                                "application-load-balancer",
+                                "network-load-balancer",
+                                "amazon-s3",
+                                "amazon-efs",
+                                "amazon-ebs",
+                                "amazon-ecs-ec2",
+                                "amazon-cloudfront",
+                                "amazon-lambda",
+                                "amazon-dynamodb",
+                                "amazon-api-gateway-http",
+                                "amazon-route53",
+                                "amazon-sqs",
+                                "amazon-sns",
+                                "amazon-cloudwatch",
+                                "amazon-eventbridge",
+                                "aws-waf-v2",
+                                "amazon-fsx-windows",
+                                "amazon-opensearch",
+                                "amazon-vpc-endpoints",
+                                "amazon-ecs-fargate"
+                              ]
+                            },
+                            "monthlyBudgetUsd": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "serviceId",
+                            "monthlyBudgetUsd"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "blueprintId",
+                      "patternId",
+                      "scenarioId",
+                      "templateId",
+                      "targetMonthlyUsd",
+                      "region",
+                      "estimateName",
+                      "notes",
+                      "environmentSplit",
+                      "operatingSystem",
+                      "scenarioPolicy",
+                      "exactAddOns"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "contractVersion",
+                  "kind",
+                  "architectureId",
+                  "blueprintId",
+                  "patternId",
+                  "scenarioId",
+                  "scenarioTitle",
+                  "modeledMonthlyUsd",
+                  "targetMonthlyUsd",
+                  "strategySummary",
+                  "linkPlan"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "validation": {
             "type": "object",
             "properties": {

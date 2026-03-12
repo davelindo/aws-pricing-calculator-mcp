@@ -69,6 +69,44 @@ test("create_calculator_link returns a readable MCP tool error for non-eligible 
   assert.match(textBlock.text, /Hint:/);
 });
 
+test("price_architecture returns a pricingCommit handle for exact scenarios", async (t) => {
+  const server = createServer();
+  const client = new Client(
+    {
+      name: "aws-pricing-calculator-mcp-test-client",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {},
+    },
+  );
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+  t.after(async () => {
+    await Promise.allSettled([client.close(), server.close()]);
+  });
+
+  const result = await client.callTool({
+    name: "price_architecture",
+    arguments: {
+      blueprintId: "container-platform",
+      region: "us-east-1",
+      targetMonthlyUsd: 7000,
+    },
+  });
+
+  const baseline = result.structuredContent.scenarios.find((scenario) => scenario.id === "baseline");
+
+  assert.equal(result.isError ?? false, false);
+  assert.ok(baseline);
+  assert.equal(baseline.calculatorEligible, true);
+  assert.ok(baseline.pricingCommit);
+  assert.equal(baseline.pricingCommit.kind, "pricing_commit");
+  assert.equal(baseline.pricingCommit.scenarioId, baseline.id);
+});
+
 test("generate_calculator_link creates a link from pricing inputs without a client-side tool chain", async (t) => {
   const server = createServer();
   const client = new Client(
@@ -143,4 +181,87 @@ test("generate_calculator_link creates a link from pricing inputs without a clie
   assert.equal(result.structuredContent.recommendedScenarioId, priced.recommendedScenarioId);
   assert.equal(result.structuredContent.estimate.shareLink, buildShareLink(ESTIMATE_ID));
   assert.equal(result.structuredContent.estimate.validation.passed, true);
+});
+
+test("create_calculator_link accepts a pricingCommit handle as the advanced commit input", async (t) => {
+  const server = createServer();
+  const client = new Client(
+    {
+      name: "aws-pricing-calculator-mcp-test-client",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {},
+    },
+  );
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+  t.after(async () => {
+    await Promise.allSettled([client.close(), server.close()]);
+  });
+
+  const priced = priceArchitecture({
+    blueprintId: "container-platform",
+    region: "us-east-1",
+    targetMonthlyUsd: 7000,
+  });
+  const expectedScenario = priced.scenarios.find(
+    (scenario) => scenario.id === priced.recommendedScenarioId,
+  );
+
+  assert.ok(expectedScenario);
+
+  const built = buildCalculatorEstimateFromScenario({
+    pricedScenario: expectedScenario,
+  });
+
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("/saveAs")) {
+      assert.equal(init.method, "POST");
+      return {
+        ok: true,
+        json: async () => ({
+          body: JSON.stringify({
+            savedKey: ESTIMATE_ID,
+          }),
+        }),
+      };
+    }
+
+    if (String(url).includes(ESTIMATE_ID)) {
+      return {
+        ok: true,
+        json: async () => built.estimate,
+      };
+    }
+
+    throw new Error(`Unexpected fetch url: ${url}`);
+  };
+
+  const pricedResult = await client.callTool({
+    name: "price_architecture",
+    arguments: {
+      blueprintId: "container-platform",
+      region: "us-east-1",
+      targetMonthlyUsd: 7000,
+    },
+  });
+  const selectedScenario = pricedResult.structuredContent.scenarios.find(
+    (scenario) => scenario.id === pricedResult.structuredContent.recommendedScenarioId,
+  );
+
+  assert.ok(selectedScenario?.pricingCommit);
+
+  const result = await client.callTool({
+    name: "create_calculator_link",
+    arguments: {
+      pricingCommit: selectedScenario.pricingCommit,
+    },
+  });
+
+  assert.equal(result.isError ?? false, false);
+  assert.equal(result.structuredContent.shareLink, buildShareLink(ESTIMATE_ID));
+  assert.equal(result.structuredContent.validation.passed, true);
 });

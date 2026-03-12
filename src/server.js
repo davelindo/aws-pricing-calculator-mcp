@@ -39,7 +39,7 @@ function successToolResponse(toolName, text, structuredContent) {
 
 function toolHint(toolName, errorMessage) {
   if (toolName === "price_architecture") {
-    return "Retry with the full architecture returned by design_architecture, supply blueprintId/brief directly, or use generate_calculator_link for a one-shot share-link flow.";
+    return "Retry with the full architecture returned by design_architecture, supply blueprintId/brief directly, or use generate_calculator_link for the one-shot flow. Exact scenarios include a pricingCommit handle for create_calculator_link.";
   }
 
   if (toolName === "generate_calculator_link") {
@@ -62,10 +62,10 @@ function toolHint(toolName, errorMessage) {
       /scenario is not calculator-eligible/i.test(errorMessage) ||
       /cannot mint an official calculator link/i.test(errorMessage)
     ) {
-      return "Pass a calculator-eligible priced scenario from price_architecture, remove modeled/unavailable services from scope, or use generate_calculator_link for a one-shot flow.";
+      return "Pass a calculator-eligible pricingCommit handle or pricedScenario from price_architecture, remove modeled/unavailable services from scope, or use generate_calculator_link for a one-shot flow.";
     }
 
-    return "Pass the priced scenario returned by price_architecture and confirm it includes a non-null linkPlan, or use generate_calculator_link instead.";
+    return "Pass the pricingCommit handle returned by price_architecture, or use generate_calculator_link instead.";
   }
 
   if (toolName === "validate_calculator_link") {
@@ -236,6 +236,7 @@ function renderPricedArchitecture(result) {
         `Policy: ${scenario.scenarioPolicy.computeCommitment}, ${scenario.scenarioPolicy.haPosture}, ${scenario.scenarioPolicy.environmentSizing}`,
         `Drivers: ${(scenario.deltaDrivers ?? []).join("; ")}`,
         `Calculator eligible: ${scenario.calculatorEligible ? "yes" : "no"}`,
+        `Commit ready: ${scenario.pricingCommit ? "yes" : "no"}`,
         (scenario.calculatorBlockers?.length ?? 0) > 0
           ? scenario.calculatorBlockers.map((value) => `- ${value}`).join("\n")
           : "- no calculator blockers",
@@ -339,6 +340,37 @@ function summarizeGeneratedScenario(scenario) {
     calculatorBlockers: scenario.calculatorBlockers ?? [],
     budgetFit: scenario.budgetFit,
     strategySummary: scenario.strategySummary,
+    pricingCommit: scenario.pricingCommit ?? null,
+  };
+}
+
+function createPricingCommit(architecture, scenario) {
+  if (!scenario?.calculatorEligible || !scenario?.linkPlan) {
+    return null;
+  }
+
+  return {
+    contractVersion: "v1",
+    kind: "pricing_commit",
+    architectureId: architecture.architectureId,
+    blueprintId: architecture.blueprintId,
+    patternId: architecture.patternId,
+    scenarioId: scenario.id,
+    scenarioTitle: scenario.title,
+    modeledMonthlyUsd: scenario.modeledMonthlyUsd,
+    targetMonthlyUsd: scenario.targetMonthlyUsd,
+    strategySummary: scenario.strategySummary,
+    linkPlan: scenario.linkPlan,
+  };
+}
+
+function attachPricingCommits(priced) {
+  return {
+    ...priced,
+    scenarios: priced.scenarios.map((scenario) => ({
+      ...scenario,
+      pricingCommit: createPricingCommit(priced.architecture, scenario),
+    })),
   };
 }
 
@@ -429,6 +461,20 @@ async function buildGeneratedEstimateResult(pricedScenario) {
   };
 }
 
+function scenarioFromPricingCommit(pricingCommit) {
+  return {
+    id: pricingCommit.scenarioId,
+    title: pricingCommit.scenarioTitle,
+    modeledMonthlyUsd: pricingCommit.modeledMonthlyUsd,
+    targetMonthlyUsd: pricingCommit.targetMonthlyUsd,
+    strategySummary: pricingCommit.strategySummary,
+    calculatorEligible: true,
+    calculatorBlockers: [],
+    linkPlan: pricingCommit.linkPlan,
+    pricingCommit,
+  };
+}
+
 export function createServer() {
   const server = new McpServer({
     name: "aws-pricing-calculator-mcp",
@@ -494,7 +540,7 @@ export function createServer() {
       outputSchema: TOOL_CONTRACTS.price_architecture.outputSchema,
     },
     withToolErrorHandling("price_architecture", async (args) => {
-      const priced = priceArchitecture(args);
+      const priced = attachPricingCommits(priceArchitecture(args));
       return successToolResponse("price_architecture", renderPricedArchitecture(priced), priced);
     }),
   );
@@ -507,7 +553,7 @@ export function createServer() {
       outputSchema: TOOL_CONTRACTS.generate_calculator_link.outputSchema,
     },
     withToolErrorHandling("generate_calculator_link", async ({ scenarioId, ...args }) => {
-      const priced = priceArchitecture(args);
+      const priced = attachPricingCommits(priceArchitecture(args));
       const selectedScenario = selectScenarioForCalculatorLink(priced, scenarioId);
       const estimate = await buildGeneratedEstimateResult(selectedScenario);
       const result = {
@@ -544,8 +590,10 @@ export function createServer() {
       inputSchema: TOOL_CONTRACTS.create_calculator_link.inputSchema,
       outputSchema: TOOL_CONTRACTS.create_calculator_link.outputSchema,
     },
-    withToolErrorHandling("create_calculator_link", async ({ pricedScenario }) => {
-      const result = await buildGeneratedEstimateResult(pricedScenario);
+    withToolErrorHandling("create_calculator_link", async ({ pricedScenario, pricingCommit }) => {
+      const result = await buildGeneratedEstimateResult(
+        pricingCommit ? scenarioFromPricingCommit(pricingCommit) : pricedScenario,
+      );
 
       return successToolResponse(
         "create_calculator_link",

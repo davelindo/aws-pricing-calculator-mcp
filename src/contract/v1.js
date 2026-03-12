@@ -639,6 +639,19 @@ const linkPlanSchema = z.object({
     )
     .default([]),
 });
+const pricingCommitSchema = z.object({
+  contractVersion: z.literal(V1_CONTRACT_VERSION),
+  kind: z.literal("pricing_commit"),
+  architectureId: z.string(),
+  blueprintId: blueprintIdEnum,
+  patternId: patternIdEnum,
+  scenarioId: z.string(),
+  scenarioTitle: z.string(),
+  modeledMonthlyUsd: z.number(),
+  targetMonthlyUsd: z.number(),
+  strategySummary: z.string(),
+  linkPlan: linkPlanSchema,
+});
 const pricedScenarioSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -658,6 +671,7 @@ const pricedScenarioSchema = z.object({
   calculatorEligible: z.boolean(),
   calculatorBlockers: z.array(z.string()),
   linkPlan: linkPlanSchema.nullable(),
+  pricingCommit: pricingCommitSchema.nullable().optional(),
   validation: validationSummarySchema,
 });
 const pricedArchitectureSchema = z.object({
@@ -686,6 +700,7 @@ const generatedCalculatorScenarioSummarySchema = z.object({
   calculatorBlockers: z.array(z.string()),
   budgetFit: budgetFitSchema,
   strategySummary: z.string(),
+  pricingCommit: pricingCommitSchema.nullable().optional(),
 });
 const generatedEstimateSchema = z.object({
   estimateId: z.string(),
@@ -781,7 +796,10 @@ export const generateCalculatorLinkInputSchema = designArchitectureInputSchema.e
   scenarioId: z.string().optional(),
 });
 export const createCalculatorLinkInputSchema = z.object({
-  pricedScenario: pricedScenarioSchema,
+  pricedScenario: pricedScenarioSchema.optional(),
+  pricingCommit: pricingCommitSchema.optional(),
+}).refine((value) => value.pricedScenario || value.pricingCommit, {
+  message: "Pass pricedScenario or pricingCommit.",
 });
 export const validateCalculatorLinkInputSchema = z.object({
   shareLinkOrEstimateId: z.string(),
@@ -816,21 +834,21 @@ export const TOOL_CONTRACTS = Object.freeze({
   price_architecture: {
     name: "price_architecture",
     description:
-      "Price one or more scenario policies for an architecture and report exact, modeled, and unavailable service coverage. Use generate_calculator_link for the recommended one-shot share-link flow.",
+      "Preview priced scenarios for an architecture and return calculator commit handles for exact scenarios. Use generate_calculator_link for the default one-shot flow, or create_calculator_link to commit a selected priced scenario.",
     inputSchema: priceArchitectureInputSchema,
     outputSchema: pricedArchitectureSchema,
   },
   generate_calculator_link: {
     name: "generate_calculator_link",
     description:
-      "Recommended one-shot flow for chat clients: design if needed, price scenarios, pick a calculator-eligible scenario, create the official AWS calculator share link, and validate the saved estimate.",
+      "Default happy path for chat clients: design if needed, price scenarios, pick a calculator-eligible scenario, create the official AWS calculator share link, and validate the saved estimate.",
     inputSchema: generateCalculatorLinkInputSchema,
     outputSchema: generatedCalculatorLinkOutputSchema,
   },
   create_calculator_link: {
     name: "create_calculator_link",
     description:
-      "Create an official AWS calculator share link from an already priced exact scenario and validate the saved estimate.",
+      "Commit a previously priced exact scenario to AWS Pricing Calculator by passing its pricingCommit handle, then validate the saved estimate.",
     inputSchema: createCalculatorLinkInputSchema,
     outputSchema: generatedEstimateSchema,
   },
