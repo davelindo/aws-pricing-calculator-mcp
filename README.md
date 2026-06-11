@@ -4,7 +4,7 @@
 ![Node >=18](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-stdio%20%7C%20streamable--http-7c3aed)
 
-`aws-pricing-calculator-mcp` is an MCP server for designing AWS architectures, pricing scenarios, creating official AWS Pricing Calculator share links, and validating the saved estimate for funding-oriented review. It runs locally over stdio and also ships a Cloudflare Worker for remote `streamable-http` deployments.
+`aws-pricing-calculator-mcp` is an MCP server for designing AWS architectures, pricing scenarios, creating official AWS Pricing Calculator share links, and validating the saved estimate. It runs locally over stdio and also ships a Cloudflare Worker that hosts the remote `streamable-http` endpoint plus an Access-protected Gemini chat workspace.
 
 ## What This Project Does
 
@@ -32,7 +32,7 @@ The server exposes these tools:
 - It produces official AWS calculator links instead of local-only estimates.
 - It supports blueprint-driven and brief-driven workflows, so agents can start from either a known pattern or rough input.
 - It compares scenario policies explicitly, including commitment posture, HA posture, storage strategy, and shared-service overhead.
-- It validates the saved estimate for pricing parity, architecture completeness, funding readiness, and governance signals.
+- It validates the saved estimate for pricing parity, architecture completeness, and governance signals.
 - It ships exact coverage across six roadmap regions:
   `us-east-1`, `ca-central-1`, `sa-east-1`, `eu-west-1`, `ap-southeast-2`, `ap-northeast-2`.
 
@@ -60,7 +60,7 @@ Use `list_service_catalog` to inspect the exact service-region matrix from the r
 ### Install
 
 ```bash
-git clone git@github.com:davelindo/aws-pricing-calculator-mcp.git
+git clone https://github.com/<your-org>/aws-pricing-calculator-mcp.git
 cd aws-pricing-calculator-mcp
 npm install
 npm run check
@@ -78,7 +78,7 @@ Or run the executable directly:
 node bin/aws-pricing-calculator-mcp.js
 ```
 
-### Run Remotely Over streamable-http
+### Run Remotely On The Cloudflare Worker
 
 ```bash
 npm run worker:dev
@@ -90,7 +90,47 @@ Deploy the Cloudflare Worker:
 npm run worker:deploy
 ```
 
-If you set `MCP_BEARER_TOKEN`, remote clients must send `Authorization: Bearer <token>` to `/mcp`.
+The Worker now expects these bindings and vars:
+
+- `CHAT_STATE` Cloudflare KV namespace
+- `GEMINI_API_KEY` Worker secret
+- `GEMINI_MODEL`
+- `CLOUDFLARE_ACCESS_TEAM_DOMAIN`
+- `CLOUDFLARE_ACCESS_AUD`
+- optional `CLOUDFLARE_ACCESS_ISSUER`
+- optional `CLOUDFLARE_ACCESS_JWKS_URL`
+
+The hosted Worker is Access-only. Every route, including `/mcp`, expects a valid `Cf-Access-Jwt-Assertion`.
+
+The Worker serves:
+
+- `/` service info
+- `/health` health info
+- `/chat` the Gemini chat workspace
+- `/mcp` the remote MCP endpoint
+
+### Run The Gemini Chatbot In Docker
+
+The repo also ships a very small Gemini-backed web chatbot that can call exactly two in-process tools:
+
+- `generate_calculator_link`
+
+Build it:
+
+```bash
+docker build -f Dockerfile.chatbot -t aws-pricing-chatbot .
+```
+
+Run it:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e GEMINI_API_KEY=your-gemini-api-key \
+  -e GEMINI_MODEL=gemini-2.5-flash \
+  aws-pricing-chatbot
+```
+
+Then open `http://localhost:3000`.
 
 ### MCP Client Configuration
 
@@ -115,13 +155,13 @@ Example remote configuration:
   "mcpServers": {
     "awsPricingCalculator": {
       "type": "streamable-http",
-      "url": "https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp"
+      "url": "https://<worker-name>.<account-subdomain>.workers.dev/mcp"
     }
   }
 }
 ```
 
-If the Worker enables `MCP_BEARER_TOKEN`, configure an equivalent bearer-auth header in your client or proxy.
+Remote MCP clients must be able to authenticate through Cloudflare Access because bearer-only `/mcp` access is no longer supported on the Worker host.
 
 ### Typical Workflow
 
@@ -195,12 +235,22 @@ npm run test:live
 
 Runs the live save/fetch parity matrix against AWS calculator endpoints.
 
+### Chat Workspace
+
+The Worker-hosted chat workspace uses Gemini plus the in-process `generate_calculator_link` tool handler.
+
+It stores chat history in Cloudflare KV, identifies users from Cloudflare Access, supports explicit email-based ACL sharing, and allows shared users to fork threads into their own private copies.
+
 ## Project Layout
 
 | Path | Purpose |
 | --- | --- |
+| `src/access.js` | Cloudflare Access JWT validation and normalized user identity |
 | `src/server.js` | MCP tool registration and schemas |
-| `src/worker.js` | Cloudflare Worker transport for `streamable-http` |
+| `src/calculator-link-runtime.js` | shared calculator-link runtime used by MCP and the chatbot |
+| `src/chatbot/` | Gemini orchestration, Worker chat routes, and KV-backed chat store |
+| `src/worker.js` | Cloudflare Worker host for `/`, `/health`, `/chat`, `/api/*`, and `/mcp` |
+| `public/chat/` | static Worker-served chat UI |
 | `src/architecture.js` | architecture design, scenario pricing, exact link planning |
 | `src/planner.js` | estimate construction helpers used by the MCP surface |
 | `src/validation.js` | saved-estimate validation and policy checks |

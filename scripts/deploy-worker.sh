@@ -36,18 +36,18 @@ echo "Deploying Cloudflare Worker '$WORKER_NAME' using $CONFIG_FILE"
 
 echo
 echo "Deployment complete."
-echo "Expected MCP endpoint:"
+echo "Expected service endpoints:"
+echo "  https://${WORKER_NAME}.workers.dev/"
+echo "  https://${WORKER_NAME}.workers.dev/chat"
 echo "  https://${WORKER_NAME}.workers.dev/mcp"
 echo
 echo "Health endpoint:"
 echo "  https://${WORKER_NAME}.workers.dev/health"
-
-if [[ -n "${MCP_BEARER_TOKEN:-}" ]]; then
-  echo
-  echo "Remote MCP auth: enabled"
-  echo "  Clients must send Authorization: Bearer <token> to /mcp"
-else
-  echo
-  echo "Remote MCP auth: disabled"
-  echo "  Set MCP_BEARER_TOKEN before deploy if the hosted /mcp endpoint should require bearer auth."
-fi
+echo
+echo "Remote auth model: Cloudflare Access"
+echo "  Configure CLOUDFLARE_ACCESS_TEAM_DOMAIN and CLOUDFLARE_ACCESS_AUD before deploy."
+echo "  The Worker expects Cf-Access-Jwt-Assertion on every route, including /mcp."
+echo
+echo "Required bindings:"
+echo "  - CHAT_STATE KV namespace"
+echo "  - GEMINI_API_KEY secret"

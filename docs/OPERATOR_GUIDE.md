@@ -73,7 +73,23 @@ In `generate_calculator_link`, `create_calculator_link`, and `validate_calculato
 - Prefer `generate_calculator_link` unless you specifically need to compare scenarios or commit a chosen scenario later.
 - Non-default regions should carry explicit justification in the notes or surrounding delivery artifacts.
 - Premium managed services should also carry explicit justification.
-- For hosted Worker deployments, set `MCP_BEARER_TOKEN` and restrict `MCP_ALLOWED_ORIGINS` for browser clients.
+- For hosted Worker deployments, configure Cloudflare Access and validate `Cf-Access-Jwt-Assertion` for every route.
+- Configure a `CHAT_STATE` KV namespace before enabling the `/chat` workspace.
+- Shared chats are read-only for non-owners; collaborators must fork a shared chat to continue it.
+
+## Worker Routes
+
+- `GET /`: authenticated service metadata
+- `GET /health`: authenticated health payload including Gemini and KV readiness
+- `GET /chat`: static Gemini chat workspace
+- `GET /api/me`: current Access identity
+- `GET /api/chats`: owned and shared chat summaries
+- `GET /api/chats/:chatId`: visible transcript plus ACL data for owners
+- `POST /api/chats`: create a chat, optionally with an initial user message
+- `POST /api/chats/:chatId/messages`: continue an owner-controlled thread
+- `POST /api/chats/:chatId/shares`: add one shared user by email
+- `DELETE /api/chats/:chatId/shares/:email`: revoke one shared user
+- `POST /api/chats/:chatId/fork`: clone any readable chat into a new owner-controlled thread
 
 ## Exact Coverage
 

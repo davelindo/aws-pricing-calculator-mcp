@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AWS Calculator Funding Chat</title>
+    <style>
+      :root {
+        --bg: #f2efe8;
+        --panel: rgba(255, 252, 246, 0.86);
+        --line: rgba(55, 49, 38, 0.14);
+        --text: #1f1c17;
+        --muted: #6d6458;
+        --accent: #0d6e63;
+        --accent-strong: #0a554d;
+        --user: #d8efe5;
+        --assistant: #fffdf8;
+        --tool: #f5e5c8;
+        --shadow: 0 24px 60px rgba(56, 45, 25, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(13, 110, 99, 0.16), transparent 28%),
+          radial-gradient(circle at top right, rgba(212, 162, 89, 0.2), transparent 30%),
+          linear-gradient(180deg, #f7f3ea 0%, var(--bg) 100%);
+      }
+
+      .shell {
+        width: min(960px, calc(100vw - 24px));
+        margin: 24px auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+        overflow: hidden;
+      }
+
+      .hero {
+        padding: 28px 28px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(13, 110, 99, 0.12);
+        color: var(--accent-strong);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 14px 0 10px;
+        font-size: clamp(32px, 5vw, 48px);
+        line-height: 0.96;
+      }
+
+      .hero p {
+        max-width: 700px;
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .examples {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+      }
+
+      .example {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.55);
+        color: var(--text);
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+
+      .chat {
+        padding: 24px;
+        display: grid;
+        gap: 16px;
+        min-height: 52vh;
+      }
+
+      .message {
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        white-space: pre-wrap;
+        line-height: 1.55;
+      }
+
+      .message.user {
+        margin-left: auto;
+        width: min(80%, 640px);
+        background: var(--user);
+      }
+
+      .message.assistant {
+        width: min(86%, 720px);
+        background: var(--assistant);
+      }
+
+      .tool-events {
+        margin-top: 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .tool-event {
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--tool);
+        font-size: 14px;
+        color: #4f4332;
+      }
+
+      .composer {
+        padding: 0 24px 24px;
+      }
+
+      form {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 22px;
+        padding: 14px;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 110px;
+        border: 0;
+        resize: vertical;
+        outline: none;
+        background: transparent;
+        font: inherit;
+        color: var(--text);
+      }
+
+      .controls {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-top: 12px;
+      }
+
+      .status {
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      button[type="submit"] {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font: inherit;
+        color: white;
+        background: linear-gradient(135deg, var(--accent) 0%, #083f3a 100%);
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          width: calc(100vw - 12px);
+          margin: 6px auto;
+          border-radius: 18px;
+        }
+
+        .hero,
+        .chat,
+        .composer {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .message.user,
+        .message.assistant {
+          width: 100%;
+        }
+
+        .controls {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <span class="eyebrow">Gemini Tool Chat</span>
+        <h1>Calculator Chat</h1>
+        <p>
+          This chatbot can create AWS Pricing Calculator links. Set
+          <code>GEMINI_API_KEY</code> on the container before you use it.
+        </p>
+        <div class="examples">
+          <button class="example" type="button">Create a $25k/month calculator in us-east-1</button>
+          <button class="example" type="button">Create a container platform calculator in us-east-1</button>
+        </div>
+      </section>
+
+      <section id="chat" class="chat">
+        <div class="message assistant">
+          Ask for a calculator link. The assistant will call the calculator tool when needed.
+        </div>
+      </section>
+
+      <section class="composer">
+        <form id="composer">
+          <textarea
+            id="prompt"
+            placeholder="Example: Create a $25k/month container platform calculator in us-east-1."
+          ></textarea>
+          <div class="controls">
+            <div id="status" class="status">Ready.</div>
+            <button id="send" type="submit">Send</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const chat = document.getElementById("chat");
+      const form = document.getElementById("composer");
+      const prompt = document.getElementById("prompt");
+      const send = document.getElementById("send");
+      const status = document.getElementById("status");
+      const exampleButtons = document.querySelectorAll(".example");
+      const messages = [];
+
+      function appendMessage(role, text, toolEvents) {
+        messages.push({ role, text });
+        const node = document.createElement("div");
+        node.className = `message ${role}`;
+        node.textContent = text;
+
+        if (Array.isArray(toolEvents) && toolEvents.length > 0) {
+          const eventsNode = document.createElement("div");
+          eventsNode.className = "tool-events";
+
+          toolEvents.forEach((event) => {
+            const eventNode = document.createElement("div");
+            eventNode.className = "tool-event";
+            eventNode.textContent = `${event.name}: ${event.summary || (event.ok ? "completed" : "failed")}`;
+            eventsNode.appendChild(eventNode);
+          });
+
+          node.appendChild(eventsNode);
+        }
+
+        chat.appendChild(node);
+        chat.scrollTop = chat.scrollHeight;
+      }
+
+      function setBusy(isBusy, nextStatus) {
+        send.disabled = isBusy;
+        prompt.disabled = isBusy;
+        status.textContent = nextStatus;
+      }
+
+      exampleButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          prompt.value = button.textContent;
+          prompt.focus();
+        });
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const text = prompt.value.trim();
+
+        if (!text) {
+          return;
+        }
+
+        appendMessage("user", text);
+        prompt.value = "";
+        setBusy(true, "Thinking and calling tools if needed...");
+
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ messages }),
+          });
+          const payload = await response.json();
+
+          if (!response.ok) {
+            throw new Error(payload.error || "Chat request failed.");
+          }
+
+          appendMessage("assistant", payload.reply, payload.toolEvents || []);
+          setBusy(false, "Ready.");
+        } catch (error) {
+          appendMessage("assistant", `Error: ${error.message}`);
+          setBusy(false, "Request failed.");
+        }
+      });
+    </script>
+  </body>
+</html>

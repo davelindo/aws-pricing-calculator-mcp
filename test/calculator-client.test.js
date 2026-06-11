@@ -7,6 +7,7 @@ import {
   fetchSavedEstimate,
   isOfficialCalculatorShareLink,
   saveEstimate,
+  validateEstimateServiceCodes,
 } from "../src/calculator-client.js";
 
 const ESTIMATE_ID = "0123456789abcdef0123456789abcdef01234567";
@@ -40,6 +41,48 @@ test("saveEstimate unwraps the calculator save response body", async () => {
 
   assert.equal(saved.savedKey, ESTIMATE_ID);
   assert.equal(saved.shareLink, buildShareLink(ESTIMATE_ID));
+});
+
+test("validateEstimateServiceCodes rejects service codes the calculator viewer cannot render", () => {
+  assert.throws(
+    () =>
+      validateEstimateServiceCodes({
+        name: "Unsupported",
+        services: {
+          bedrock: {
+            serviceCode: "amazonBedrock",
+            serviceName: "Amazon Bedrock",
+          },
+          kiro: {
+            serviceCode: "kiro",
+            serviceName: "Kiro",
+          },
+        },
+      }),
+    /AWS calculator viewer does not support service code\(s\): amazonBedrock, kiro/,
+  );
+});
+
+test("validateEstimateServiceCodes allows native Bedrock parent services with subservices", () => {
+  assert.doesNotThrow(() =>
+    validateEstimateServiceCodes({
+      name: "Bedrock",
+      services: {
+        bedrock: {
+          serviceCode: "amazonBedrock",
+          estimateFor: "amazonBedrockClassesGroup",
+          subServices: [
+            {
+              serviceCode: "anthropic",
+              calculationComponents: {
+                location: { value: "global" },
+              },
+            },
+          ],
+        },
+      },
+    }),
+  );
 });
 
 test("fetchSavedEstimate loads the shared estimate document", async () => {

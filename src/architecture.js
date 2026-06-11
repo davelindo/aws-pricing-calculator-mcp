@@ -39,6 +39,15 @@ const UNSUPPORTED_DATABASES = [
   { pattern: /mariadb/i, label: "MariaDB" },
   { pattern: /oracle/i, label: "Oracle" },
 ];
+const UNSUPPORTED_CALCULATOR_PRODUCTS = [
+  {
+    id: "kiro",
+    pattern: /\bkiro\b/i,
+    label: "Kiro",
+    reason:
+      "Kiro is not exposed as a savable AWS Pricing Calculator service template",
+  },
+];
 const SHARED_POSTGRES_BUDGET_PROFILES = [
   {
     instanceType: "db.t4g.large",
@@ -1139,6 +1148,14 @@ function unsupportedDatabaseMention(brief) {
   }
 
   return null;
+}
+
+function unsupportedCalculatorProductMentions({ brief, serviceIds = [] }) {
+  const haystack = `${brief} ${serviceIds.join(" ")}`;
+
+  return UNSUPPORTED_CALCULATOR_PRODUCTS.filter((candidate) =>
+    candidate.pattern.test(haystack),
+  );
 }
 
 function inferBlueprintId({ templateId, blueprintId, brief, operatingSystem, assumptions }) {
@@ -2333,6 +2350,10 @@ export function designArchitecture({
     assumptions,
   });
   const unsupportedDatabase = unsupportedDatabaseMention(normalizedBrief);
+  const unsupportedCalculatorProducts = unsupportedCalculatorProductMentions({
+    brief: normalizedBrief,
+    serviceIds,
+  });
 
   if (unsupportedDatabase) {
     const message = `The brief references ${unsupportedDatabase}, but the current modeled engine still requires explicit support before pricing.`;
@@ -2352,6 +2373,29 @@ export function designArchitecture({
         "databaseEngine",
         `Should this estimate stay on ${unsupportedDatabase}, or can it be normalized to PostgreSQL for pricing and funding review?`,
         "Confirm the intended database engine before pricing.",
+        true,
+      ),
+    );
+  }
+
+  for (const product of unsupportedCalculatorProducts) {
+    const message = `${product.label} was requested, but ${product.reason}.`;
+    blockers.push(message);
+    blockerDetails.push(
+      makeStructuredItem(
+        `design.unsupported-calculator-product.${product.id}`,
+        "serviceIds",
+        message,
+        "Do not replace this with adjacent infrastructure. Price it outside the official calculator link or add verified native calculator serializer support when AWS exposes one.",
+        true,
+      ),
+    );
+    unresolvedQuestions.push(
+      makeStructuredItem(
+        `question.unsupported-calculator-product.${product.id}`,
+        "serviceIds",
+        `Should ${product.label} be tracked outside the calculator link, or should this estimate wait until native calculator support is available?`,
+        "Confirm the non-calculator treatment before final pricing.",
         true,
       ),
     );

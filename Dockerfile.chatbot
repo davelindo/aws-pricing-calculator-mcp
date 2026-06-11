@@ -1,0 +1,15 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY src ./src
+
+ENV PORT=3000
+ENV GEMINI_MODEL=gemini-2.5-flash
+
+EXPOSE 3000
+
+CMD ["node", "./src/chatbot/server.js"]
