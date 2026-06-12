@@ -24,6 +24,37 @@ if ! command -v npx >/dev/null 2>&1; then
   exit 1
 fi
 
+if grep -q "replace-with-" "$CONFIG_FILE"; then
+  echo "Refusing to deploy: $CONFIG_FILE still contains placeholder values." >&2
+  exit 1
+fi
+
+if ! grep -q 'binding = "CHAT_STATE"' "$CONFIG_FILE"; then
+  cat >&2 <<EOF
+Refusing to deploy: $CONFIG_FILE has no CHAT_STATE KV binding.
+
+Create a KV namespace, add a [[kv_namespaces]] block for CHAT_STATE to your
+deployment config, and provision these Worker settings before deploying:
+  - GEMINI_API_KEY as a Worker secret
+  - CLOUDFLARE_ACCESS_TEAM_DOMAIN
+  - CLOUDFLARE_ACCESS_AUD
+  - optional CLOUDFLARE_ACCESS_ISSUER
+  - optional CLOUDFLARE_ACCESS_JWKS_URL
+EOF
+  exit 1
+fi
+
+if ! grep -q 'name = "CHAT_COORDINATOR"' "$CONFIG_FILE"; then
+  cat >&2 <<EOF
+Refusing to deploy: $CONFIG_FILE has no CHAT_COORDINATOR Durable Object binding.
+
+Add the ChatCoordinator Durable Object binding and migration before deploying
+the Worker chat API. Chat mutations are coordinated through this Durable Object
+to avoid KV read-modify-write races.
+EOF
+  exit 1
+fi
+
 WRANGLER_BASE=(npx wrangler --config "$CONFIG_FILE")
 
 if [[ -n "$WORKER_ENV" ]]; then

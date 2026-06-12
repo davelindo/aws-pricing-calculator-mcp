@@ -742,10 +742,10 @@
             <input id="share-email" type="email" placeholder="Share with user@example.com" />
             <button id="share-submit" class="ghost" type="button">Share</button>
           </div>
-          <div id="acl-list" class="acl-list"></div>
+          <div id="acl-list" class="acl-list" aria-live="polite"></div>
         </section>
 
-        <section id="messages" class="messages">
+        <section id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text">
           <div class="empty">
             Start a conversation.
           </div>
@@ -758,7 +758,7 @@
               placeholder="Example: Create a $25k/month container platform calculator in us-east-1."
             ></textarea>
             <div class="composer-row">
-              <div id="status" class="status">Ready.</div>
+              <div id="status" class="status" role="status" aria-live="polite">Ready.</div>
               <button id="send" class="primary" type="submit">Send</button>
             </div>
           </form>
@@ -772,6 +772,7 @@
         chats: { owned: [], shared: [] },
         activeChat: null,
         sending: false,
+        requestSeq: 0,
       };
 
       const identityNode = document.getElementById("identity");
@@ -787,6 +788,8 @@
       const promptNode = document.getElementById("prompt");
       const sendNode = document.getElementById("send");
       const forkNode = document.getElementById("fork-chat");
+      const newChatNode = document.getElementById("new-chat");
+      const shareSubmitNode = document.getElementById("share-submit");
       const shareEmailNode = document.getElementById("share-email");
 
       function setStatus(text, tone = "") {
@@ -798,6 +801,12 @@
         state.sending = busy;
         sendNode.disabled = busy;
         promptNode.disabled = busy;
+        forkNode.disabled = busy;
+        newChatNode.disabled = busy;
+        shareSubmitNode.disabled = busy;
+        [...document.querySelectorAll(".chat-item")].forEach((button) => {
+          button.disabled = busy;
+        });
       }
 
       function formatDateTime(value) {
@@ -925,12 +934,22 @@
           button.classList.add("active");
         }
 
-        button.innerHTML = `
-          <span class="label">${summary.title}</span>
-          <span class="badge ${summary.permission}">${summary.permission === "owner" ? "Owned" : "Shared"}</span>
-          <span class="meta">${formatDateTime(summary.updatedAt || summary.createdAt)}</span>
-        `;
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = summary.title || "Untitled chat";
+        const badge = document.createElement("span");
+        badge.className = `badge ${summary.permission}`;
+        badge.textContent = summary.permission === "owner" ? "Owned" : "Shared";
+        const meta = document.createElement("span");
+        meta.className = "meta";
+        meta.textContent = formatDateTime(summary.updatedAt || summary.createdAt);
+        button.append(label, badge, meta);
+        button.disabled = state.sending;
         button.addEventListener("click", async () => {
+          if (state.sending) {
+            return;
+          }
+
           try {
             setStatus("Loading thread...", "loading");
             await loadChat(summary.chatId);
@@ -961,6 +980,30 @@
         renderInto(sharedNode, state.chats.shared, "No shared chats yet.");
       }
 
+      function appendLinkedText(node, text) {
+        const value = String(text || "");
+        const pattern = /(https:\/\/calculator\.aws\/#[^\s]+)/g;
+        let cursor = 0;
+
+        for (const match of value.matchAll(pattern)) {
+          if (match.index > cursor) {
+            node.appendChild(document.createTextNode(value.slice(cursor, match.index)));
+          }
+
+          const link = document.createElement("a");
+          link.href = match[0];
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = match[0];
+          node.appendChild(link);
+          cursor = match.index + match[0].length;
+        }
+
+        if (cursor < value.length) {
+          node.appendChild(document.createTextNode(value.slice(cursor)));
+        }
+      }
+
       function renderMessages(messages) {
         messagesNode.innerHTML = "";
 
@@ -977,7 +1020,7 @@
           node.className = `message ${message.role}${message.variant ? ` ${message.variant}` : ""}${message.pending ? " pending" : ""}`;
           const bodyNode = document.createElement("div");
           bodyNode.className = "message-body";
-          bodyNode.textContent = message.text;
+          appendLinkedText(bodyNode, message.text);
           node.appendChild(bodyNode);
 
           if (Array.isArray(message.toolEvents) && message.toolEvents.length) {
@@ -1026,12 +1069,19 @@
         aclEmails.forEach((email) => {
           const chip = document.createElement("div");
           chip.className = "acl-chip";
-          chip.innerHTML = `<span>${email}</span>`;
+          const label = document.createElement("span");
+          label.textContent = email;
+          chip.appendChild(label);
           const removeButton = document.createElement("button");
           removeButton.className = "ghost";
           removeButton.type = "button";
           removeButton.textContent = "Remove";
+          removeButton.disabled = state.sending;
           removeButton.addEventListener("click", async () => {
+            if (state.sending) {
+              return;
+            }
+
             try {
               setStatus("Updating share access...", "loading");
               await api(`/api/chats/${state.activeChat.chat.chatId}/shares/${encodeURIComponent(email)}`, {
@@ -1071,6 +1121,8 @@
         forkNode.classList.toggle("hidden", isOwner);
         promptNode.disabled = !isOwner || state.sending;
         sendNode.disabled = !isOwner || state.sending;
+        forkNode.disabled = state.sending;
+        shareSubmitNode.disabled = state.sending;
         promptNode.placeholder = isOwner
           ? "Ask the assistant to create a calculator or continue the analysis."
           : "Fork this thread to continue it.";
@@ -1118,12 +1170,15 @@
 
       async function sendPrompt(text) {
         const normalizedText = text.trim();
+        const requestId = state.requestSeq + 1;
+        state.requestSeq = requestId;
 
         if (!normalizedText) {
           return;
         }
 
         const hadActiveChat = Boolean(state.activeChat?.chat?.chatId);
+        const previousActiveChat = state.activeChat;
         const previousMessages = hadActiveChat ? [...(state.activeChat.messages || [])] : [];
         const userMessage = createLocalMessage("user", normalizedText);
         const pendingMessage = createLocalMessage("assistant", "Working through calculator tools...", [], {
@@ -1147,6 +1202,10 @@
           let payload;
 
           if (!state.activeChat) {
+            return;
+          }
+
+          if (requestId !== state.requestSeq) {
             return;
           }
 
@@ -1182,6 +1241,9 @@
             setStatus(`Reply saved, but thread refresh failed: ${error.message}`, "error");
           }
         } catch (error) {
+          if (!hadActiveChat && state.activeChat?.chat?.chatId?.startsWith("draft-")) {
+            state.activeChat = previousActiveChat;
+          }
           applyTransientAssistantMessage(error.message, "error");
           setStatus(error.message, "error");
         } finally {
@@ -1190,7 +1252,11 @@
         }
       }
 
-      document.getElementById("new-chat").addEventListener("click", async () => {
+      newChatNode.addEventListener("click", async () => {
+        if (state.sending) {
+          return;
+        }
+
         try {
           setStatus("Creating chat...", "loading");
           await createChat();
@@ -1205,7 +1271,11 @@
         await sendPrompt(promptNode.value);
       });
 
-      document.getElementById("share-submit").addEventListener("click", async () => {
+      shareSubmitNode.addEventListener("click", async () => {
+        if (state.sending) {
+          return;
+        }
+
         const email = shareEmailNode.value.trim();
 
         if (!email || !state.activeChat) {
@@ -1227,7 +1297,7 @@
       });
 
       forkNode.addEventListener("click", async () => {
-        if (!state.activeChat) {
+        if (!state.activeChat || state.sending) {
           return;
         }
 

@@ -12,17 +12,10 @@ directory = "./public"
 binding = "ASSETS"
 run_worker_first = true
 
-[vars]
-MCP_ALLOWED_ORIGINS = ""
-GEMINI_MODEL = "gemini-2.5-flash"
-CLOUDFLARE_ACCESS_TEAM_DOMAIN = ""
-CLOUDFLARE_ACCESS_AUD = ""
-CLOUDFLARE_ACCESS_ISSUER = ""
-CLOUDFLARE_ACCESS_JWKS_URL = ""
-CHAT_REPLAY_WINDOW_ITEMS = "40"
-CHAT_MAX_TOOL_CYCLES = "2"
+[[durable_objects.bindings]]
+name = "CHAT_COORDINATOR"
+class_name = "ChatCoordinator"
 
-[[kv_namespaces]]
-binding = "CHAT_STATE"
-id = "replace-with-chat-state-kv-namespace-id"
-preview_id = "replace-with-chat-state-preview-kv-namespace-id"
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatCoordinator"]

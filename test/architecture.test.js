@@ -44,6 +44,21 @@ test("designArchitecture blocks Kiro requests instead of substituting adjacent i
   );
 });
 
+test("designArchitecture does not block explicitly negated Kiro mentions", () => {
+  const architecture = designArchitecture({
+    brief: "Create a Bedrock migration estimate, but do not include Kiro seats.",
+    region: "us-east-1",
+    targetMonthlyUsd: 5000,
+  });
+
+  assert.equal(
+    architecture.blockerDetails.some(
+      (blocker) => blocker.id === "design.unsupported-calculator-product.kiro",
+    ),
+    false,
+  );
+});
+
 test("priceArchitecture keeps the edge blueprint exact-link eligible in eu-west-1", () => {
   const priced = priceArchitecture({
     blueprintId: "edge-api-platform",

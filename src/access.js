@@ -61,6 +61,7 @@ export async function authenticateAccessRequest(request, env) {
   const { payload } = await jwtVerify(token, remoteJwkSetFor(accessJwksUrl(env, teamDomain)), {
     audience: accessAudience(env),
     issuer: accessIssuer(env, teamDomain),
+    algorithms: ["RS256"],
   });
 
   const email = normalizeAccessEmail(payload.email);

@@ -228,12 +228,32 @@ export async function listChatsForUser({
 export async function listChatTurns({
   env,
   chatId,
+  limit = null,
 }) {
   const kv = requireChatKv(env);
   const keys = await listAll(kv, turnPrefix(chatId));
-  const turns = await Promise.all(keys.map((entry) => getJson(kv, entry.name)));
+  const selectedKeys =
+    Number.isFinite(limit) && limit > 0 ? keys.slice(-Math.floor(limit)) : keys;
+  const turns = await Promise.all(selectedKeys.map((entry) => getJson(kv, entry.name)));
 
   return turns.filter(Boolean);
+}
+
+function isPlainVisibleUserTurn(turn) {
+  return (
+    turn?.visible === true &&
+    turn?.viewRole === "user" &&
+    turn?.content?.role === "user" &&
+    Array.isArray(turn.content.parts) &&
+    turn.content.parts.every((part) => typeof part?.text === "string")
+  );
+}
+
+function replayTurnsFromWindow(turns, limit) {
+  const candidateTurns = turns.slice(-limit);
+  const startIndex = candidateTurns.findIndex(isPlainVisibleUserTurn);
+
+  return startIndex >= 0 ? candidateTurns.slice(startIndex) : [];
 }
 
 export async function listReplayContents({
@@ -241,8 +261,8 @@ export async function listReplayContents({
   chatId,
   limit = replayWindowLimit(env),
 }) {
-  const turns = await listChatTurns({ env, chatId });
-  const replayTurns = turns.slice(-limit);
+  const turns = await listChatTurns({ env, chatId, limit: Math.max(limit * 2, limit) });
+  const replayTurns = replayTurnsFromWindow(turns, limit);
   return replayTurns.map((turn) => turn.content);
 }
 

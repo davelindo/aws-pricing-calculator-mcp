@@ -440,7 +440,7 @@ test("chat API can create a calculator-backed reply and persist the conversation
   assert.equal(loadedBody.messages[1].toolEvents[0].name, "generate_calculator_link");
 });
 
-test("chat API returns JSON when chat execution throws", async () => {
+test("chat API returns JSON when the chat model is not configured", async () => {
   const access = await createAccessHarness();
   const env = buildEnv({
     CLOUDFLARE_ACCESS_TEAM_DOMAIN: access.teamDomain,
@@ -463,10 +463,9 @@ test("chat API returns JSON when chat execution throws", async () => {
     env,
   );
 
-  assert.equal(response.status, 500);
+  assert.equal(response.status, 503);
   assert.match(response.headers.get("content-type") ?? "", /application\/json/);
 
   const body = await response.json();
-  assert.equal(body.error, "Internal Server Error");
-  assert.match(body.details, /GEMINI_API_KEY is required/i);
+  assert.equal(body.error, "Chat model is not configured.");
 });

@@ -5,7 +5,7 @@ const DEFAULT_MAX_TOOL_CYCLES = 2;
 const BASE_SYSTEM_PROMPT = [
   "You are an AWS pricing calculator assistant.",
   "Use generate_calculator_link when the user wants an AWS Pricing Calculator estimate created, saved, or shared.",
-  "Interpret 'container migration', 'kubernetes migration', 'EKS migration', or 'ECS migration' as a strong hint for blueprintId='container-platform', workload.projectMotions=['migration'], and workload.hasExistingNonAwsWorkload=true unless the user says it is AWS-to-AWS only.",
+  "Interpret 'container migration', 'kubernetes migration', 'EKS migration', or 'ECS migration' as a strong hint for blueprintId='container-platform' unless the user says it is AWS-to-AWS only.",
   "In AWS pricing contexts, interpret phrases like '$25k MRR', '$25k/mo', '$25k per month', or '25k monthly' as a likely targetMonthlyUsd monthly AWS spend unless the user clearly means business revenue instead.",
   "Treat tool results as the source of truth and do not invent calculator links or pricing.",
   "If required inputs are missing, ask only for the minimum facts needed to continue.",
@@ -94,7 +94,7 @@ function inferSystemHints(contents) {
     normalized.includes("ecs migration")
   ) {
     hints.push(
-      "Latest user hint: this looks like a container migration. Prefer blueprintId='container-platform', workload.projectMotions=['migration'], and workload.hasExistingNonAwsWorkload=true unless contradicted.",
+      "Latest user hint: this looks like a container migration. Prefer blueprintId='container-platform' unless contradicted.",
     );
   }
 
@@ -114,6 +114,7 @@ async function callGemini({
   model,
   contents,
   toolDeclarations,
+  signal,
 }) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/${normalizeModel(model)}:generateContent`,
@@ -123,6 +124,7 @@ async function callGemini({
         "content-type": "application/json",
         "x-goog-api-key": apiKey,
       },
+      signal,
       body: JSON.stringify({
         systemInstruction: {
           role: "system",
@@ -142,7 +144,7 @@ async function callGemini({
   );
 
   if (!response.ok) {
-    const failureBody = await response.text();
+    const failureBody = (await response.text()).slice(0, 500);
     throw new Error(
       `Gemini API request failed (${response.status} ${response.statusText}): ${failureBody}`,
     );
@@ -172,17 +174,30 @@ export async function runGeminiConversation({
   const toolEvents = [];
 
   for (let cycle = 0; cycle <= maxToolCycles; cycle += 1) {
-    const response = await callGemini({
-      apiKey,
-      model,
-      contents: workingContents,
-      toolDeclarations,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    let response;
+
+    try {
+      response = await callGemini({
+        apiKey,
+        model,
+        contents: workingContents,
+        toolDeclarations,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
     const candidate = response?.candidates?.[0];
     const modelContent = candidate?.content;
 
     if (!modelContent?.parts?.length) {
-      throw new Error("Gemini returned no candidate content.");
+      const reason =
+        response?.promptFeedback?.blockReason ||
+        candidate?.finishReason ||
+        "no candidate content";
+      throw new Error(`Gemini could not produce a reply: ${reason}.`);
     }
 
     workingContents.push(modelContent);
@@ -207,6 +222,11 @@ export async function runGeminiConversation({
     const toolResponseParts = await Promise.all(
       functionCalls.map(async (call) => {
         const toolResult = await executeTool(call.name, call.args ?? {});
+        const modelToolResult = {
+          ok: toolResult.ok,
+          tool: toolResult.tool,
+          summary: toolResult.summary ?? toolResult.error?.message ?? null,
+        };
         toolEvents.push({
           name: call.name,
           ok: toolResult.ok,
@@ -219,7 +239,7 @@ export async function runGeminiConversation({
             name: call.name,
             id: call.id,
             response: {
-              result: toolResult,
+              result: modelToolResult,
             },
           },
         };

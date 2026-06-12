@@ -105,6 +105,8 @@ test("price_architecture returns a pricingCommit handle for exact scenarios", as
   assert.ok(baseline.pricingCommit);
   assert.equal(baseline.pricingCommit.kind, "pricing_commit");
   assert.equal(baseline.pricingCommit.scenarioId, baseline.id);
+  assert.equal(result.structuredContent.architecture.architectureRef.kind, "architecture_ref");
+  assert.equal(typeof result.structuredContent.architecture.architectureRef.token, "string");
 });
 
 test("generate_calculator_link creates a link from pricing inputs without a client-side tool chain", async (t) => {

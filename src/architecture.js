@@ -1154,7 +1154,9 @@ function unsupportedCalculatorProductMentions({ brief, serviceIds = [] }) {
   const haystack = `${brief} ${serviceIds.join(" ")}`;
 
   return UNSUPPORTED_CALCULATOR_PRODUCTS.filter((candidate) =>
-    candidate.pattern.test(haystack),
+    serviceIds.some((serviceId) => candidate.pattern.test(serviceId)) ||
+    (candidate.pattern.test(haystack) &&
+      !new RegExp(`\\b(no|not|without|exclude|skip|don't|do not)\\s+\\w*\\s*${candidate.id}\\b`, "i").test(haystack)),
   );
 }
 

@@ -75,6 +75,7 @@ In `generate_calculator_link`, `create_calculator_link`, and `validate_calculato
 - Premium managed services should also carry explicit justification.
 - For hosted Worker deployments, configure Cloudflare Access and validate `Cf-Access-Jwt-Assertion` for every route.
 - Configure a `CHAT_STATE` KV namespace before enabling the `/chat` workspace.
+- Configure the `CHAT_COORDINATOR` Durable Object binding before enabling the `/chat` API.
 - Shared chats are read-only for non-owners; collaborators must fork a shared chat to continue it.
 
 ## Worker Routes

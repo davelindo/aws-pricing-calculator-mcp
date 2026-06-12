@@ -76,10 +76,26 @@ function createPricingCommit(architecture, scenario) {
 }
 
 export function attachPricingCommits(priced) {
-  const architecture = priced.architecture;
+  const architecture = {
+    ...priced.architecture,
+    architectureRef:
+      priced.architecture.architectureRef ??
+      {
+        contractVersion: "v1",
+        kind: "architecture_ref",
+        architectureId: priced.architecture.architectureId,
+        blueprintId: priced.architecture.blueprintId,
+        patternId: priced.architecture.patternId,
+        token: encodeOpaqueToken({
+          kind: "architecture_ref",
+          architecture: priced.architecture,
+        }),
+      },
+  };
 
   return {
     ...priced,
+    architecture,
     scenarios: priced.scenarios.map((scenario) => ({
       ...scenario,
       pricingCommit: createPricingCommit(architecture, scenario),

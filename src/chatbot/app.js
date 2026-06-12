@@ -17,6 +17,16 @@ import {
 
 const CHAT_PATH = "/chat";
 const CHAT_INDEX_PATH = "/chat/index.html";
+const MAX_CHAT_BODY_BYTES = 1024 * 1024;
+const MAX_USER_TEXT_CHARS = 8000;
+
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
 
 function jsonResponse(data, init = {}) {
   const headers = new Headers(init.headers);
@@ -29,16 +39,26 @@ function jsonResponse(data, init = {}) {
 }
 
 async function readJsonBody(request) {
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+
+  if (contentLength > MAX_CHAT_BODY_BYTES) {
+    throw new HttpError(413, "Request body is too large.");
+  }
+
   const bodyText = await request.text();
 
   if (!bodyText) {
     return {};
   }
 
+  if (bodyText.length > MAX_CHAT_BODY_BYTES) {
+    throw new HttpError(413, "Request body is too large.");
+  }
+
   try {
     return JSON.parse(bodyText);
   } catch {
-    throw new Error("Request body must be valid JSON.");
+    throw new HttpError(400, "Request body must be valid JSON.");
   }
 }
 
@@ -46,7 +66,7 @@ function requireGeminiApiKey(env) {
   const apiKey = String(env?.GEMINI_API_KEY ?? "").trim();
 
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is required.");
+    throw new HttpError(503, "Chat model is not configured.");
   }
 
   return apiKey;
@@ -61,7 +81,11 @@ function normalizeUserText(value) {
   const text = String(value ?? "").trim();
 
   if (!text) {
-    throw new Error("A non-empty text value is required.");
+    throw new HttpError(400, "A non-empty text value is required.");
+  }
+
+  if (text.length > MAX_USER_TEXT_CHARS) {
+    throw new HttpError(413, `Text must be ${MAX_USER_TEXT_CHARS} characters or fewer.`);
   }
 
   return text;
@@ -71,7 +95,7 @@ function normalizeChatId(value) {
   const chatId = String(value ?? "").trim();
 
   if (!chatId) {
-    throw new Error("A chat id is required.");
+    throw new HttpError(400, "A chat id is required.");
   }
 
   return chatId;
@@ -94,7 +118,6 @@ function deriveToolStateHints(toolEvents = []) {
         hints.lastCalculatorShareLink = shareLink;
       }
     }
-
   }
 
   return hints;
@@ -119,14 +142,11 @@ async function runStoredChatTurn({
   const access = await getChatForUser({ env, chatId, userEmail });
 
   if (!access) {
-    return jsonResponse({ error: "Chat not found." }, { status: 404 });
+    throw new HttpError(404, "Chat not found.");
   }
 
   if (access.permission !== "owner") {
-    return jsonResponse(
-      { error: "Only the owner can continue this chat. Shared users can fork it." },
-      { status: 403 },
-    );
+    throw new HttpError(403, "Only the owner can continue this chat. Shared users can fork it.");
   }
 
   const priorContents = await listReplayContents({ env, chatId });
@@ -134,6 +154,24 @@ async function runStoredChatTurn({
     role: "user",
     parts: [{ text }],
   };
+  const nextTitle =
+    access.meta.title === "Untitled chat" && (access.meta.contentCount ?? 0) === 0
+      ? text
+      : access.meta.title;
+  const userTurn = buildTurnRecord({
+    content: userContent,
+    visible: true,
+    viewRole: "user",
+    text,
+  });
+  const metaAfterUser = await appendChatTurns({
+    env,
+    chatId,
+    meta: access.meta,
+    turns: [userTurn],
+    title: nextTitle,
+    toolStateHints: access.meta.toolStateHints ?? {},
+  });
   const result = await runGeminiConversation({
     apiKey: requireGeminiApiKey(env),
     model: env?.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
@@ -141,21 +179,29 @@ async function runStoredChatTurn({
     maxToolCycles: maxToolCycles(env),
   });
 
-  const turns = [
-    buildTurnRecord({
-      content: userContent,
-      visible: true,
-      viewRole: "user",
-      text,
-    }),
-  ];
+  const turns = [];
 
   for (const content of result.appendedContents) {
     const hasFunctionCalls = content.role === "model" && content.parts?.some((part) => part?.functionCall);
     const hasFunctionResponses =
       content.role === "user" && content.parts?.some((part) => part?.functionResponse);
+    const visibleText = content.parts?.map((part) => part?.text ?? "").filter(Boolean).join("\n").trim();
 
     if (hasFunctionCalls || hasFunctionResponses) {
+      if (hasFunctionCalls && visibleText) {
+        turns.push(
+          buildTurnRecord({
+            content: {
+              role: "model",
+              parts: [{ text: visibleText }],
+            },
+            visible: true,
+            viewRole: "assistant",
+            text: visibleText,
+          }),
+        );
+      }
+
       turns.push(
         buildTurnRecord({
           content,
@@ -168,16 +214,12 @@ async function runStoredChatTurn({
     turns.push(buildVisibleAssistantTurn(content, result.toolEvents));
   }
 
-  const nextTitle =
-    access.meta.title === "Untitled chat" && (access.meta.contentCount ?? 0) === 0
-      ? text
-      : access.meta.title;
   const nextMeta = await appendChatTurns({
     env,
     chatId,
-    meta: access.meta,
+    meta: metaAfterUser,
     turns,
-    title: nextTitle,
+    title: metaAfterUser.title,
     toolStateHints: deriveToolStateHints(result.toolEvents),
   });
 
@@ -230,6 +272,20 @@ async function serveChatAsset(request, env) {
 }
 
 export async function handleChatAppRequest(request, env, user) {
+  try {
+    return await handleChatAppRequestInner(request, env, user);
+  } catch (error) {
+    const status = error instanceof HttpError ? error.status : 500;
+    return jsonResponse(
+      {
+        error: error instanceof HttpError ? error.message : "Internal Server Error",
+      },
+      { status },
+    );
+  }
+}
+
+async function handleChatAppRequestInner(request, env, user) {
   const url = new URL(request.url);
   const path = url.pathname;
   const segments = path.split("/").filter(Boolean);
@@ -278,7 +334,7 @@ export async function handleChatAppRequest(request, env, user) {
       const access = await getChatForUser({ env, chatId, userEmail: user.email });
 
       if (!access) {
-        return jsonResponse({ error: "Chat not found." }, { status: 404 });
+        throw new HttpError(404, "Chat not found.");
       }
 
       const [turns, aclEmails] = await Promise.all([
@@ -305,6 +361,16 @@ export async function handleChatAppRequest(request, env, user) {
 
     if (request.method === "POST" && segments.length === 4 && segments[3] === "shares") {
       const body = await readJsonBody(request);
+      const access = await getChatForUser({ env, chatId, userEmail: user.email });
+
+      if (!access) {
+        throw new HttpError(404, "Chat not found.");
+      }
+
+      if (access.permission !== "owner") {
+        throw new HttpError(403, "Only the owner can share this chat.");
+      }
+
       const aclEmails = await shareChat({
         env,
         chatId,
@@ -316,6 +382,16 @@ export async function handleChatAppRequest(request, env, user) {
     }
 
     if (request.method === "DELETE" && segments.length === 5 && segments[3] === "shares") {
+      const access = await getChatForUser({ env, chatId, userEmail: user.email });
+
+      if (!access) {
+        throw new HttpError(404, "Chat not found.");
+      }
+
+      if (access.permission !== "owner") {
+        throw new HttpError(403, "Only the owner can revoke access.");
+      }
+
       const aclEmails = await unshareChat({
         env,
         chatId,
@@ -328,6 +404,12 @@ export async function handleChatAppRequest(request, env, user) {
 
     if (request.method === "POST" && segments.length === 4 && segments[3] === "fork") {
       const body = await readJsonBody(request);
+      const access = await getChatForUser({ env, chatId, userEmail: user.email });
+
+      if (!access) {
+        throw new HttpError(404, "Chat not found.");
+      }
+
       const forkedMeta = await forkChat({
         env,
         sourceChatId: chatId,

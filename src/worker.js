@@ -1,8 +1,11 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
 import { authenticateAccessRequest } from "./access.js";
+import { ChatCoordinator } from "./chatbot/coordinator.js";
 import { handleChatAppRequest } from "./chatbot/app.js";
 import { createServer } from "./server.js";
+
+export { ChatCoordinator };
 
 const MCP_PATH = "/mcp";
 const HEALTH_PATH = "/health";
@@ -41,7 +44,7 @@ function originHeader(request, env) {
   const allowedOrigins = csvValues(env?.MCP_ALLOWED_ORIGINS);
 
   if (allowedOrigins.length === 0) {
-    return requestOrigin ?? "*";
+    return requestOrigin ? "null" : "*";
   }
 
   return requestOrigin && allowedOrigins.includes(requestOrigin)
@@ -72,7 +75,7 @@ function accessDeniedResponse(request, env, error) {
   const response = jsonResponse(
     {
       error: "Access denied",
-      details: error instanceof Error ? error.message : String(error),
+      details: "Cloudflare Access authentication is required.",
     },
     { status: 403 },
   );
@@ -87,7 +90,7 @@ function internalErrorResponse(request, env, error) {
   const response = jsonResponse(
     {
       error: "Internal Server Error",
-      details: error instanceof Error ? error.message : String(error),
+      details: "The request could not be completed.",
     },
     { status: 500 },
   );
@@ -118,8 +121,30 @@ function healthResponse(env, user) {
     auth: "cloudflare-access",
     geminiConfigured: Boolean(String(env?.GEMINI_API_KEY ?? "").trim()),
     chatStateConfigured: Boolean(env?.CHAT_STATE),
+    chatCoordinatorConfigured: Boolean(env?.CHAT_COORDINATOR),
     user: user.email,
   });
+}
+
+function withChatUserHeaders(request, user) {
+  const headers = new Headers(request.headers);
+  headers.set("x-chat-user-email", user.email);
+  headers.set("x-chat-user-subject", user.subject);
+  return new Request(request, { headers });
+}
+
+function isChatApiPath(pathname) {
+  return pathname === "/api/me" || pathname === "/api/chats" || pathname.startsWith("/api/chats/");
+}
+
+async function handleCoordinatedChatApi(request, env, user) {
+  if (!env?.CHAT_COORDINATOR) {
+    return handleChatAppRequest(request, env, user);
+  }
+
+  const id = env.CHAT_COORDINATOR.idFromName("chat-api");
+  const stub = env.CHAT_COORDINATOR.get(id);
+  return stub.fetch(withChatUserHeaders(request, user));
 }
 
 async function handleMcpRequest(request, env) {
@@ -143,7 +168,7 @@ async function handleMcpRequest(request, env) {
       jsonResponse(
         {
           error: "Internal Server Error",
-          details: error instanceof Error ? error.message : String(error),
+          details: "The MCP request could not be completed.",
         },
         { status: 500 },
       ),
@@ -178,7 +203,9 @@ export default {
         return healthResponse(env, user);
       }
 
-      const chatResponse = await handleChatAppRequest(request, env, user);
+      const chatResponse = isChatApiPath(url.pathname)
+        ? await handleCoordinatedChatApi(request, env, user)
+        : await handleChatAppRequest(request, env, user);
 
       if (chatResponse) {
         return chatResponse;

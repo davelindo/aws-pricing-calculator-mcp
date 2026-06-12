@@ -93,6 +93,7 @@ npm run worker:deploy
 The Worker now expects these bindings and vars:
 
 - `CHAT_STATE` Cloudflare KV namespace
+- `CHAT_COORDINATOR` Durable Object binding
 - `GEMINI_API_KEY` Worker secret
 - `GEMINI_MODEL`
 - `CLOUDFLARE_ACCESS_TEAM_DOMAIN`
@@ -239,7 +240,7 @@ Runs the live save/fetch parity matrix against AWS calculator endpoints.
 
 The Worker-hosted chat workspace uses Gemini plus the in-process `generate_calculator_link` tool handler.
 
-It stores chat history in Cloudflare KV, identifies users from Cloudflare Access, supports explicit email-based ACL sharing, and allows shared users to fork threads into their own private copies.
+It stores chat history in Cloudflare KV, coordinates chat API mutations through a Durable Object, identifies users from Cloudflare Access, supports explicit email-based ACL sharing, and allows shared users to fork threads into their own private copies.
 
 ## Project Layout
 

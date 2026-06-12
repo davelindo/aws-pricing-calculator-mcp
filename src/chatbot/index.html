@@ -221,7 +221,7 @@
         </div>
       </section>
 
-      <section id="chat" class="chat">
+      <section id="chat" class="chat" role="log" aria-live="polite" aria-relevant="additions text">
         <div class="message assistant">
           Ask for a calculator link. The assistant will call the calculator tool when needed.
         </div>
@@ -234,7 +234,7 @@
             placeholder="Example: Create a $25k/month container platform calculator in us-east-1."
           ></textarea>
           <div class="controls">
-            <div id="status" class="status">Ready.</div>
+            <div id="status" class="status" role="status" aria-live="polite">Ready.</div>
             <button id="send" type="submit">Send</button>
           </div>
         </form>

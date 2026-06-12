@@ -135,6 +135,34 @@ const CHATBOT_TOOLS = Object.freeze({
   },
 });
 
+function sanitizePublicCalculatorText(value, maxLength) {
+  return String(value ?? "")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function sanitizeCalculatorArgs(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) {
+    return args;
+  }
+
+  const sanitized = { ...args };
+
+  for (const key of ["estimateName", "clientName"]) {
+    if (typeof sanitized[key] === "string") {
+      sanitized[key] = sanitizePublicCalculatorText(sanitized[key], 80);
+    }
+  }
+
+  if (typeof sanitized.notes === "string") {
+    sanitized.notes = sanitizePublicCalculatorText(sanitized.notes, 500);
+  }
+
+  return sanitized;
+}
+
 export function listChatbotToolDeclarations() {
   return Object.entries(CHATBOT_TOOLS).map(([name, tool]) => ({
     name,
@@ -157,7 +185,9 @@ export async function executeChatbotTool(name, args) {
   }
 
   try {
-    const parsedArgs = tool.inputSchema.parse(args ?? {});
+    const preparedArgs =
+      name === "generate_calculator_link" ? sanitizeCalculatorArgs(args ?? {}) : args ?? {};
+    const parsedArgs = tool.inputSchema.parse(preparedArgs);
     const result = await tool.handler(parsedArgs);
 
     return {
