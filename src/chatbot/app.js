@@ -19,6 +19,7 @@ const CHAT_PATH = "/chat";
 const CHAT_INDEX_PATH = "/chat/index.html";
 const MAX_CHAT_BODY_BYTES = 1024 * 1024;
 const MAX_USER_TEXT_CHARS = 8000;
+const MAX_VISIBLE_TURNS = 500;
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -198,6 +199,7 @@ async function runStoredChatTurn({
             visible: true,
             viewRole: "assistant",
             text: visibleText,
+            replay: false,
           }),
         );
       }
@@ -276,6 +278,11 @@ export async function handleChatAppRequest(request, env, user) {
     return await handleChatAppRequestInner(request, env, user);
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
+
+    if (!(error instanceof HttpError)) {
+      console.error(error);
+    }
+
     return jsonResponse(
       {
         error: error instanceof HttpError ? error.message : "Internal Server Error",
@@ -338,7 +345,7 @@ async function handleChatAppRequestInner(request, env, user) {
       }
 
       const [turns, aclEmails] = await Promise.all([
-        listChatTurns({ env, chatId }),
+        listChatTurns({ env, chatId, limit: MAX_VISIBLE_TURNS }),
         access.permission === "owner" ? listAclEmails({ env, chatId }) : Promise.resolve([]),
       ]);
 
@@ -421,6 +428,10 @@ async function handleChatAppRequestInner(request, env, user) {
         chat: chatPayload(forkedMeta, "owner"),
       });
     }
+  }
+
+  if (segments[0] === "api") {
+    throw new HttpError(404, "Not found.");
   }
 
   return null;

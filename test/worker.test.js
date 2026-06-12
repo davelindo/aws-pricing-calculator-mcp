@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 
-import worker from "../src/worker.js";
+import worker, { ChatCoordinator } from "../src/worker.js";
 
 class MemoryKv {
   constructor() {
@@ -32,6 +32,30 @@ class MemoryKv {
       keys: slice.map((name) => ({ name })),
       list_complete: start + pageSize >= keys.length,
       cursor: start + pageSize >= keys.length ? undefined : String(start + pageSize),
+    };
+  }
+}
+
+class MemoryChatCoordinatorNamespace {
+  constructor(env) {
+    this.env = env;
+    this.names = [];
+    this.instances = new Map();
+  }
+
+  idFromName(name) {
+    this.names.push(name);
+    return name;
+  }
+
+  get(id) {
+    if (!this.instances.has(id)) {
+      this.instances.set(id, new ChatCoordinator({}, this.env));
+    }
+
+    const instance = this.instances.get(id);
+    return {
+      fetch: (request) => instance.fetch(request),
     };
   }
 }
@@ -86,7 +110,7 @@ async function createAccessHarness() {
 }
 
 function buildEnv(overrides = {}) {
-  return {
+  const env = {
     CLOUDFLARE_ACCESS_TEAM_DOMAIN: "team.example.com",
     CLOUDFLARE_ACCESS_AUD: "test-aud",
     MCP_ALLOWED_ORIGINS: "https://client.example.com",
@@ -101,6 +125,12 @@ function buildEnv(overrides = {}) {
     GEMINI_MODEL: "gemini-2.5-flash",
     ...overrides,
   };
+
+  if (!Object.prototype.hasOwnProperty.call(overrides, "CHAT_COORDINATOR")) {
+    env.CHAT_COORDINATOR = new MemoryChatCoordinatorNamespace(env);
+  }
+
+  return env;
 }
 
 function withAccessHeader(request, token) {
@@ -293,6 +323,7 @@ test("chat API supports explicit sharing and read plus fork permissions", async 
   );
   const sharedBody = await shared.json();
   assert.deepEqual(sharedBody.aclEmails, ["shared@example.com"]);
+  assert.equal(env.CHAT_COORDINATOR.names.includes(chatId), true);
 
   const readable = await worker.fetch(
     withAccessHeader(new Request(`https://example.com/api/chats/${chatId}`), sharedToken),

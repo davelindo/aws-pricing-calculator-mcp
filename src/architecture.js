@@ -1155,9 +1155,29 @@ function unsupportedCalculatorProductMentions({ brief, serviceIds = [] }) {
 
   return UNSUPPORTED_CALCULATOR_PRODUCTS.filter((candidate) =>
     serviceIds.some((serviceId) => candidate.pattern.test(serviceId)) ||
-    (candidate.pattern.test(haystack) &&
-      !new RegExp(`\\b(no|not|without|exclude|skip|don't|do not)\\s+\\w*\\s*${candidate.id}\\b`, "i").test(haystack)),
+    (candidate.pattern.test(haystack) && !isNegatedProductMention(haystack, candidate.id)),
   );
+}
+
+function isNegatedProductMention(haystack, productId) {
+  const escapedProduct = productId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const dependencyWithoutPattern = new RegExp(
+    `\\b(?:cannot|can't|cant|can not|won't|will not|must not|should not)\\b[^.!?]{0,80}\\bwithout\\b[^.!?]{0,24}\\b${escapedProduct}\\b`,
+    "i",
+  );
+
+  if (dependencyWithoutPattern.test(haystack)) {
+    return false;
+  }
+
+  const negatedPatterns = [
+    `\\b(?:do not|don't|dont|not going to|will not|won't)\\s+(?:include|use|using|need|require|price|add|buy|get)?\\s*(?:\\w+\\s+){0,3}${escapedProduct}\\b`,
+    `\\bwithout\\s+(?:including|using|adding|pricing)?\\s*${escapedProduct}\\b`,
+    `\\b(?:exclude|skip|omit|remove)\\s+(?:\\w+\\s+){0,3}${escapedProduct}\\b`,
+    `\\b${escapedProduct}\\s+(?:is|are)?\\s*(?:not needed|not required|out of scope|excluded)\\b`,
+  ];
+
+  return negatedPatterns.some((pattern) => new RegExp(pattern, "i").test(haystack));
 }
 
 function inferBlueprintId({ templateId, blueprintId, brief, operatingSystem, assumptions }) {

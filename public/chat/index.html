@@ -772,7 +772,7 @@
         chats: { owned: [], shared: [] },
         activeChat: null,
         sending: false,
-        requestSeq: 0,
+        navigationSeq: 0,
       };
 
       const identityNode = document.getElementById("identity");
@@ -1145,9 +1145,15 @@
       }
 
       async function loadChat(chatId) {
-        state.activeChat = normalizeChatDetail(
-          await api(`/api/chats/${chatId}`, { method: "GET" }),
-        );
+        const requestId = state.navigationSeq + 1;
+        state.navigationSeq = requestId;
+        const detail = normalizeChatDetail(await api(`/api/chats/${chatId}`, { method: "GET" }));
+
+        if (requestId !== state.navigationSeq) {
+          return state.activeChat;
+        }
+
+        state.activeChat = detail;
         renderChatLists();
         renderActiveChat();
         return state.activeChat;
@@ -1170,8 +1176,6 @@
 
       async function sendPrompt(text) {
         const normalizedText = text.trim();
-        const requestId = state.requestSeq + 1;
-        state.requestSeq = requestId;
 
         if (!normalizedText) {
           return;
@@ -1202,10 +1206,6 @@
           let payload;
 
           if (!state.activeChat) {
-            return;
-          }
-
-          if (requestId !== state.requestSeq) {
             return;
           }
 

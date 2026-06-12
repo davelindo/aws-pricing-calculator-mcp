@@ -2,6 +2,7 @@ import { normalizeAccessEmail } from "../access.js";
 
 const DEFAULT_CHAT_TITLE = "Untitled chat";
 const DEFAULT_REPLAY_WINDOW_ITEMS = 40;
+const EMAIL_PATTERN = /^[^\s@:]+@[^\s@:]+\.[^\s@:]+$/;
 
 function requireChatKv(env) {
   if (!env?.CHAT_STATE) {
@@ -96,6 +97,16 @@ function deriveTitle(title, fallbackText) {
   }
 
   return trimmedText.replace(/\s+/g, " ").slice(0, 80);
+}
+
+function normalizeShareTargetEmail(value) {
+  const email = normalizeAccessEmail(value);
+
+  if (!EMAIL_PATTERN.test(email)) {
+    throw new Error("A valid target email is required.");
+  }
+
+  return email;
 }
 
 async function writeChatSummaryIndexes(kv, meta, aclEmails = []) {
@@ -262,7 +273,10 @@ export async function listReplayContents({
   limit = replayWindowLimit(env),
 }) {
   const turns = await listChatTurns({ env, chatId, limit: Math.max(limit * 2, limit) });
-  const replayTurns = replayTurnsFromWindow(turns, limit);
+  const replayTurns = replayTurnsFromWindow(
+    turns.filter((turn) => turn.replay !== false),
+    limit,
+  );
   return replayTurns.map((turn) => turn.content);
 }
 
@@ -281,6 +295,7 @@ export function buildTurnRecord({
   viewRole = null,
   text = "",
   toolEvents = [],
+  replay = true,
 }) {
   const createdAt = nowIso();
   return {
@@ -290,6 +305,7 @@ export function buildTurnRecord({
     viewRole,
     text,
     toolEvents,
+    replay,
     content: jsonClone(content),
   };
 }
@@ -342,11 +358,7 @@ export async function shareChat({
     throw new Error("Only the owner can share this chat.");
   }
 
-  const normalizedTarget = normalizeAccessEmail(targetEmail);
-
-  if (!normalizedTarget) {
-    throw new Error("A target email is required.");
-  }
+  const normalizedTarget = normalizeShareTargetEmail(targetEmail);
 
   if (normalizedTarget === access.meta.ownerEmail) {
     throw new Error("The owner already has access.");
@@ -379,7 +391,7 @@ export async function unshareChat({
     throw new Error("Only the owner can revoke access.");
   }
 
-  const normalizedTarget = normalizeAccessEmail(targetEmail);
+  const normalizedTarget = normalizeShareTargetEmail(targetEmail);
 
   await Promise.all([
     kv.delete(aclKey(chatId, normalizedTarget)),
@@ -402,7 +414,7 @@ export async function forkChat({
     throw new Error("Chat not found or access denied.");
   }
 
-  const sourceTurns = await listChatTurns({ env, chatId: sourceChatId });
+  const sourceTurns = await listChatTurns({ env, chatId: sourceChatId, limit: 500 });
   const forkMeta = await createChat({
     env,
     ownerEmail: userEmail,

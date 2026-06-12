@@ -44,17 +44,22 @@ function originHeader(request, env) {
   const allowedOrigins = csvValues(env?.MCP_ALLOWED_ORIGINS);
 
   if (allowedOrigins.length === 0) {
-    return requestOrigin ? "null" : "*";
+    return requestOrigin ? null : "*";
   }
 
   return requestOrigin && allowedOrigins.includes(requestOrigin)
     ? requestOrigin
-    : "null";
+    : null;
 }
 
 function withCorsHeaders(response, request, env) {
   const headers = new Headers(response.headers);
-  headers.set("Access-Control-Allow-Origin", originHeader(request, env));
+  const allowedOrigin = originHeader(request, env);
+
+  if (allowedOrigin) {
+    headers.set("Access-Control-Allow-Origin", allowedOrigin);
+  }
+
   headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   headers.set("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS.join(", "));
   headers.set("Access-Control-Expose-Headers", CORS_EXPOSE_HEADERS.join(", "));
@@ -86,6 +91,7 @@ function accessDeniedResponse(request, env, error) {
 }
 
 function internalErrorResponse(request, env, error) {
+  console.error(error);
   const pathname = new URL(request.url).pathname;
   const response = jsonResponse(
     {
@@ -137,12 +143,24 @@ function isChatApiPath(pathname) {
   return pathname === "/api/me" || pathname === "/api/chats" || pathname.startsWith("/api/chats/");
 }
 
+function chatCoordinatorName(pathname) {
+  const segments = pathname.split("/").filter(Boolean);
+
+  if (segments[0] === "api" && segments[1] === "chats" && segments[2]) {
+    return segments[2];
+  }
+
+  return null;
+}
+
 async function handleCoordinatedChatApi(request, env, user) {
-  if (!env?.CHAT_COORDINATOR) {
+  const coordinatorName = chatCoordinatorName(new URL(request.url).pathname);
+
+  if (!env?.CHAT_COORDINATOR || !coordinatorName) {
     return handleChatAppRequest(request, env, user);
   }
 
-  const id = env.CHAT_COORDINATOR.idFromName("chat-api");
+  const id = env.CHAT_COORDINATOR.idFromName(coordinatorName);
   const stub = env.CHAT_COORDINATOR.get(id);
   return stub.fetch(withChatUserHeaders(request, user));
 }
@@ -163,6 +181,7 @@ async function handleMcpRequest(request, env) {
     const response = await transport.handleRequest(request);
     return withCorsHeaders(response, request, env);
   } catch (error) {
+    console.error(error);
     void server.close();
     return withCorsHeaders(
       jsonResponse(

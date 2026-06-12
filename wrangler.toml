@@ -3,6 +3,7 @@ main = "src/worker.js"
 compatibility_date = "2026-03-11"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
+keep_vars = true
 
 [observability]
 enabled = true
