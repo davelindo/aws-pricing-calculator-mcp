@@ -2,7 +2,16 @@ import { normalizeAccessEmail } from "../access.js";
 
 const DEFAULT_CHAT_TITLE = "Untitled chat";
 const DEFAULT_REPLAY_WINDOW_ITEMS = 40;
+export const MAX_VISIBLE_TURNS = 500;
+export const MAX_FORK_TURNS = 400;
 const EMAIL_PATTERN = /^[^\s@:]+@[^\s@:]+\.[^\s@:]+$/;
+
+export class InvalidShareTargetEmailError extends Error {
+  constructor() {
+    super("A valid target email is required.");
+    this.name = "InvalidShareTargetEmailError";
+  }
+}
 
 function requireChatKv(env) {
   if (!env?.CHAT_STATE) {
@@ -103,7 +112,7 @@ function normalizeShareTargetEmail(value) {
   const email = normalizeAccessEmail(value);
 
   if (!EMAIL_PATTERN.test(email)) {
-    throw new Error("A valid target email is required.");
+    throw new InvalidShareTargetEmailError();
   }
 
   return email;
@@ -414,7 +423,7 @@ export async function forkChat({
     throw new Error("Chat not found or access denied.");
   }
 
-  const sourceTurns = await listChatTurns({ env, chatId: sourceChatId, limit: 500 });
+  const sourceTurns = await listChatTurns({ env, chatId: sourceChatId, limit: MAX_FORK_TURNS });
   const forkMeta = await createChat({
     env,
     ownerEmail: userEmail,

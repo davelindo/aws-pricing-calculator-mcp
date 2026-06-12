@@ -1,5 +1,7 @@
 import { DEFAULT_GEMINI_MODEL, DEFAULT_MAX_TOOL_CYCLES, runGeminiConversation } from "./gemini.js";
 import {
+  InvalidShareTargetEmailError,
+  MAX_VISIBLE_TURNS,
   appendChatTurns,
   buildTurnRecord,
   createChat,
@@ -19,7 +21,6 @@ const CHAT_PATH = "/chat";
 const CHAT_INDEX_PATH = "/chat/index.html";
 const MAX_CHAT_BODY_BYTES = 1024 * 1024;
 const MAX_USER_TEXT_CHARS = 8000;
-const MAX_VISIBLE_TURNS = 500;
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -277,15 +278,23 @@ export async function handleChatAppRequest(request, env, user) {
   try {
     return await handleChatAppRequestInner(request, env, user);
   } catch (error) {
-    const status = error instanceof HttpError ? error.status : 500;
+    const status =
+      error instanceof HttpError
+        ? error.status
+        : error instanceof InvalidShareTargetEmailError
+          ? 400
+          : 500;
 
-    if (!(error instanceof HttpError)) {
+    if (!(error instanceof HttpError) && !(error instanceof InvalidShareTargetEmailError)) {
       console.error(error);
     }
 
     return jsonResponse(
       {
-        error: error instanceof HttpError ? error.message : "Internal Server Error",
+        error:
+          error instanceof HttpError || error instanceof InvalidShareTargetEmailError
+            ? error.message
+            : "Internal Server Error",
       },
       { status },
     );

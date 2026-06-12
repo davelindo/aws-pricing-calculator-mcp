@@ -1165,8 +1165,12 @@ function isNegatedProductMention(haystack, productId) {
     `\\b(?:cannot|can't|cant|can not|won't|will not|must not|should not)\\b[^.!?]{0,80}\\bwithout\\b[^.!?]{0,24}\\b${escapedProduct}\\b`,
     "i",
   );
+  const requiredExclusionPattern = new RegExp(
+    `\\b(?:do not|don't|dont|cannot|can't|cant|can not|will not|won't|must not|should not)\\s+(?:skip|exclude|omit|remove)\\b[^.!?]{0,40}\\b${escapedProduct}\\b`,
+    "i",
+  );
 
-  if (dependencyWithoutPattern.test(haystack)) {
+  if (dependencyWithoutPattern.test(haystack) || requiredExclusionPattern.test(haystack)) {
     return false;
   }
 

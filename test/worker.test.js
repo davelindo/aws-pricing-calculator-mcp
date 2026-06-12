@@ -325,6 +325,19 @@ test("chat API supports explicit sharing and read plus fork permissions", async 
   assert.deepEqual(sharedBody.aclEmails, ["shared@example.com"]);
   assert.equal(env.CHAT_COORDINATOR.names.includes(chatId), true);
 
+  const invalidShare = await worker.fetch(
+    withAccessHeader(
+      new Request(`https://example.com/api/chats/${chatId}/shares`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "spoof@example.com:owned:victim" }),
+      }),
+      ownerToken,
+    ),
+    env,
+  );
+  assert.equal(invalidShare.status, 400);
+
   const readable = await worker.fetch(
     withAccessHeader(new Request(`https://example.com/api/chats/${chatId}`), sharedToken),
     env,

@@ -73,6 +73,20 @@ test("designArchitecture still blocks affirmative Kiro requirements that use wit
   );
 });
 
+test("designArchitecture still blocks Kiro when the brief says not to skip it", () => {
+  const architecture = designArchitecture({
+    brief: "Do not skip Kiro onboarding; include 5 seats in the migration estimate.",
+    region: "us-east-1",
+    targetMonthlyUsd: 5000,
+  });
+
+  assert.ok(
+    architecture.blockerDetails.some(
+      (blocker) => blocker.id === "design.unsupported-calculator-product.kiro",
+    ),
+  );
+});
+
 test("priceArchitecture keeps the edge blueprint exact-link eligible in eu-west-1", () => {
   const priced = priceArchitecture({
     blueprintId: "edge-api-platform",
