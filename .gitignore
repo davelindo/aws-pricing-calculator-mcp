@@ -1,5 +1,7 @@
 node_modules/
+.npm-cache/
 .DS_Store
+.config/
 coverage/
 npm-debug.log*
 ROADMAP.md
@@ -7,3 +9,6 @@ ROADMAP.local.md
 .env
 .dev.vars
 .wrangler/
+
+# Local/private source inputs and working artifacts.
+inputs/

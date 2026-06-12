@@ -26,6 +26,67 @@ test("designArchitecture infers an edge blueprint and explicit capability covera
   assert.equal(architecture.serviceCoverage.unavailable.length, 0);
 });
 
+test("designArchitecture blocks Kiro requests instead of substituting adjacent infrastructure", () => {
+  const architecture = designArchitecture({
+    brief:
+      "Need a 60k ARR AI migration from GCP/Anthropic to Amazon Bedrock with 5 Kiro seats for compliance.",
+    region: "us-east-1",
+    targetMonthlyUsd: 5000,
+  });
+
+  assert.equal(architecture.readyToPrice, false);
+  assert.doesNotMatch(architecture.blockers.join(" "), /Amazon Bedrock was requested/i);
+  assert.match(architecture.blockers.join(" "), /Kiro was requested/i);
+  assert.ok(
+    architecture.blockerDetails.some(
+      (blocker) => blocker.id === "design.unsupported-calculator-product.kiro",
+    ),
+  );
+});
+
+test("designArchitecture does not block explicitly negated Kiro mentions", () => {
+  const architecture = designArchitecture({
+    brief: "Create a Bedrock migration estimate, but do not include Kiro seats.",
+    region: "us-east-1",
+    targetMonthlyUsd: 5000,
+  });
+
+  assert.equal(
+    architecture.blockerDetails.some(
+      (blocker) => blocker.id === "design.unsupported-calculator-product.kiro",
+    ),
+    false,
+  );
+});
+
+test("designArchitecture still blocks affirmative Kiro requirements that use without", () => {
+  const architecture = designArchitecture({
+    brief: "We cannot proceed without 5 Kiro seats in the migration estimate.",
+    region: "us-east-1",
+    targetMonthlyUsd: 5000,
+  });
+
+  assert.ok(
+    architecture.blockerDetails.some(
+      (blocker) => blocker.id === "design.unsupported-calculator-product.kiro",
+    ),
+  );
+});
+
+test("designArchitecture still blocks Kiro when the brief says not to skip it", () => {
+  const architecture = designArchitecture({
+    brief: "Do not skip Kiro onboarding; include 5 seats in the migration estimate.",
+    region: "us-east-1",
+    targetMonthlyUsd: 5000,
+  });
+
+  assert.ok(
+    architecture.blockerDetails.some(
+      (blocker) => blocker.id === "design.unsupported-calculator-product.kiro",
+    ),
+  );
+});
+
 test("priceArchitecture keeps the edge blueprint exact-link eligible in eu-west-1", () => {
   const priced = priceArchitecture({
     blueprintId: "edge-api-platform",

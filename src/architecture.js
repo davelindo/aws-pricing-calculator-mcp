@@ -39,6 +39,15 @@ const UNSUPPORTED_DATABASES = [
   { pattern: /mariadb/i, label: "MariaDB" },
   { pattern: /oracle/i, label: "Oracle" },
 ];
+const UNSUPPORTED_CALCULATOR_PRODUCTS = [
+  {
+    id: "kiro",
+    pattern: /\bkiro\b/i,
+    label: "Kiro",
+    reason:
+      "Kiro is not exposed as a savable AWS Pricing Calculator service template",
+  },
+];
 const SHARED_POSTGRES_BUDGET_PROFILES = [
   {
     instanceType: "db.t4g.large",
@@ -1139,6 +1148,40 @@ function unsupportedDatabaseMention(brief) {
   }
 
   return null;
+}
+
+function unsupportedCalculatorProductMentions({ brief, serviceIds = [] }) {
+  const haystack = `${brief} ${serviceIds.join(" ")}`;
+
+  return UNSUPPORTED_CALCULATOR_PRODUCTS.filter((candidate) =>
+    serviceIds.some((serviceId) => candidate.pattern.test(serviceId)) ||
+    (candidate.pattern.test(haystack) && !isNegatedProductMention(haystack, candidate.id)),
+  );
+}
+
+function isNegatedProductMention(haystack, productId) {
+  const escapedProduct = productId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const dependencyWithoutPattern = new RegExp(
+    `\\b(?:cannot|can't|cant|can not|won't|will not|must not|should not)\\b[^.!?]{0,80}\\bwithout\\b[^.!?]{0,24}\\b${escapedProduct}\\b`,
+    "i",
+  );
+  const requiredExclusionPattern = new RegExp(
+    `\\b(?:do not|don't|dont|cannot|can't|cant|can not|will not|won't|must not|should not)\\s+(?:skip|exclude|omit|remove)\\b[^.!?]{0,40}\\b${escapedProduct}\\b`,
+    "i",
+  );
+
+  if (dependencyWithoutPattern.test(haystack) || requiredExclusionPattern.test(haystack)) {
+    return false;
+  }
+
+  const negatedPatterns = [
+    `\\b(?:do not|don't|dont|not going to|will not|won't)\\s+(?:include|use|using|need|require|price|add|buy|get)?\\s*(?:\\w+\\s+){0,3}${escapedProduct}\\b`,
+    `\\bwithout\\s+(?:including|using|adding|pricing)?\\s*${escapedProduct}\\b`,
+    `\\b(?:exclude|skip|omit|remove)\\s+(?:\\w+\\s+){0,3}${escapedProduct}\\b`,
+    `\\b${escapedProduct}\\s+(?:is|are)?\\s*(?:not needed|not required|out of scope|excluded)\\b`,
+  ];
+
+  return negatedPatterns.some((pattern) => new RegExp(pattern, "i").test(haystack));
 }
 
 function inferBlueprintId({ templateId, blueprintId, brief, operatingSystem, assumptions }) {
@@ -2333,6 +2376,10 @@ export function designArchitecture({
     assumptions,
   });
   const unsupportedDatabase = unsupportedDatabaseMention(normalizedBrief);
+  const unsupportedCalculatorProducts = unsupportedCalculatorProductMentions({
+    brief: normalizedBrief,
+    serviceIds,
+  });
 
   if (unsupportedDatabase) {
     const message = `The brief references ${unsupportedDatabase}, but the current modeled engine still requires explicit support before pricing.`;
@@ -2352,6 +2399,29 @@ export function designArchitecture({
         "databaseEngine",
         `Should this estimate stay on ${unsupportedDatabase}, or can it be normalized to PostgreSQL for pricing and funding review?`,
         "Confirm the intended database engine before pricing.",
+        true,
+      ),
+    );
+  }
+
+  for (const product of unsupportedCalculatorProducts) {
+    const message = `${product.label} was requested, but ${product.reason}.`;
+    blockers.push(message);
+    blockerDetails.push(
+      makeStructuredItem(
+        `design.unsupported-calculator-product.${product.id}`,
+        "serviceIds",
+        message,
+        "Do not replace this with adjacent infrastructure. Price it outside the official calculator link or add verified native calculator serializer support when AWS exposes one.",
+        true,
+      ),
+    );
+    unresolvedQuestions.push(
+      makeStructuredItem(
+        `question.unsupported-calculator-product.${product.id}`,
+        "serviceIds",
+        `Should ${product.label} be tracked outside the calculator link, or should this estimate wait until native calculator support is available?`,
+        "Confirm the non-calculator treatment before final pricing.",
         true,
       ),
     );

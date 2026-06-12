@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+.npm-cache
+npm-debug.log
+test
+coverage
+.DS_Store
+.config
+.env
+.env.*
+.dev.vars
+.wrangler
+inputs

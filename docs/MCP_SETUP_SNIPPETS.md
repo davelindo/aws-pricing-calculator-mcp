@@ -2,9 +2,9 @@
 
 Remote MCP endpoint:
 
-`https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp`
+`https://<worker-name>.<account-subdomain>.workers.dev/mcp`
 
-These snippets assume the Worker does not require bearer auth. If you set `MCP_BEARER_TOKEN`, configure `Authorization: Bearer <token>` in the client or terminate auth at a reverse proxy.
+These snippets assume the Worker is protected by Cloudflare Access. Remote clients must be able to authenticate through Access or connect through an approved proxy that supplies a valid `Cf-Access-Jwt-Assertion`.
 
 ## Claude
 
@@ -15,8 +15,8 @@ For Claude and Claude Desktop, add this MCP as a custom remote connector:
 1. Open `Settings -> Connectors`
 2. Click `Add custom connector`
 3. Name it `AWS Pricing Calculator`
-4. Set the URL to `https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp`
-5. Leave OAuth settings empty for this deployment unless you are fronting the Worker with your own auth layer
+4. Set the URL to `https://<worker-name>.<account-subdomain>.workers.dev/mcp`
+5. Configure authentication for the Access-protected deployment or front the Worker with your own auth layer
 6. Click `Add`
 
 Notes:
@@ -27,7 +27,7 @@ Notes:
 ### Claude Code
 
 ```bash
-claude mcp add --transport http awsPricingCalculator https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp
+claude mcp add --transport http awsPricingCalculator https://<worker-name>.<account-subdomain>.workers.dev/mcp
 ```
 
 Optional verification:
@@ -40,7 +40,7 @@ claude mcp get awsPricingCalculator
 ## Codex CLI
 
 ```bash
-codex mcp add awsPricingCalculator --url https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp
+codex mcp add awsPricingCalculator --url https://<worker-name>.<account-subdomain>.workers.dev/mcp
 ```
 
 ## Generic `mcp.json` Snippet
@@ -52,7 +52,7 @@ For MCP clients that use an `mcpServers` JSON config:
   "mcpServers": {
     "awsPricingCalculator": {
       "type": "streamable-http",
-      "url": "https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp"
+      "url": "https://<worker-name>.<account-subdomain>.workers.dev/mcp"
     }
   }
 }
@@ -64,7 +64,7 @@ For MCP clients that use an `mcpServers` JSON config:
 {
   "type": "mcp",
   "server_label": "awsPricingCalculator",
-  "server_url": "https://aws-pricing-calculator-mcp.dave-lindon10.workers.dev/mcp",
+  "server_url": "https://<worker-name>.<account-subdomain>.workers.dev/mcp",
   "require_approval": "never"
 }
 ```
