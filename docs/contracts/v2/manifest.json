@@ -1,0 +1,34 @@
+{
+  "contractVersion": "v2",
+  "tools": [
+    {
+      "name": "list_service_catalog",
+      "description": "List discoverable AWS services and their calculator support.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v2.tools.list_service_catalog.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v2.tools.list_service_catalog.output"
+    },
+    {
+      "name": "interpret_architecture",
+      "description": "Interpret any architecture definition into provenance-aware graph IR.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v2.tools.interpret_architecture.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v2.tools.interpret_architecture.output"
+    },
+    {
+      "name": "price_architecture",
+      "description": "Resolve and price architecture components across open scenarios.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v2.tools.price_architecture.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v2.tools.price_architecture.output"
+    },
+    {
+      "name": "generate_calculator_link",
+      "description": "Interpret, price, and generate an eligible AWS Calculator link.",
+      "inputSchemaId": "aws-pricing-calculator-mcp.contract.v2.tools.generate_calculator_link.input",
+      "outputSchemaId": "aws-pricing-calculator-mcp.contract.v2.tools.generate_calculator_link.output"
+    }
+  ],
+  "openIdentifiers": [
+    "serviceId",
+    "mediaType",
+    "formatHint"
+  ]
+}

@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { createContractArtifacts, listToolContracts } from "../src/contract/v1.js";
+import { createV2ContractArtifacts, listV2ToolContracts } from "../src/contract/v2.js";
 import { createServer } from "../src/server.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONTRACTS_DIR = path.resolve(__dirname, "../docs/contracts/v1");
+const CONTRACTS_ROOT = path.resolve(__dirname, "../docs/contracts");
 
 function stableJson(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
@@ -19,11 +19,11 @@ async function writeJson(filePath, value) {
   await fs.writeFile(filePath, stableJson(value), "utf8");
 }
 
-async function emittedToolSnapshot() {
-  const server = createServer();
+async function emittedToolSnapshot(createContractServer, clientName) {
+  const server = createContractServer();
   const client = new Client(
     {
-      name: "aws-pricing-calculator-mcp-contract-generator",
+      name: clientName,
       version: "1.0.0",
     },
     {
@@ -48,30 +48,45 @@ async function emittedToolSnapshot() {
   }
 }
 
-async function main() {
-  const artifacts = createContractArtifacts();
-  const toolsSnapshot = await emittedToolSnapshot();
+async function writeContractVersion({
+  directory,
+  artifacts,
+  contracts,
+  createContractServer,
+  clientName,
+}) {
+  const toolsSnapshot = await emittedToolSnapshot(createContractServer, clientName);
 
-  await fs.mkdir(CONTRACTS_DIR, { recursive: true });
-  await writeJson(path.join(CONTRACTS_DIR, "manifest.json"), artifacts.manifest);
-  await writeJson(path.join(CONTRACTS_DIR, "list-tools.snapshot.json"), toolsSnapshot);
-  await writeJson(path.join(CONTRACTS_DIR, "tool-error.schema.json"), artifacts.toolError);
+  await fs.mkdir(directory, { recursive: true });
+  await writeJson(path.join(directory, "manifest.json"), artifacts.manifest);
+  await writeJson(path.join(directory, "list-tools.snapshot.json"), toolsSnapshot);
+  await writeJson(path.join(directory, "tool-error.schema.json"), artifacts.toolError);
 
-  for (const contract of listToolContracts()) {
+  for (const contract of contracts) {
     const schemas = artifacts.tools[contract.name];
 
     if (schemas.input) {
       await writeJson(
-        path.join(CONTRACTS_DIR, `${contract.name}.input.schema.json`),
+        path.join(directory, `${contract.name}.input.schema.json`),
         schemas.input,
       );
     }
 
     await writeJson(
-      path.join(CONTRACTS_DIR, `${contract.name}.output.schema.json`),
+      path.join(directory, `${contract.name}.output.schema.json`),
       schemas.output,
     );
   }
+}
+
+async function main() {
+  await writeContractVersion({
+    directory: path.join(CONTRACTS_ROOT, "v2"),
+    artifacts: createV2ContractArtifacts(),
+    contracts: listV2ToolContracts(),
+    createContractServer: createServer,
+    clientName: "aws-pricing-calculator-mcp-contract-generator",
+  });
 }
 
 main().catch((error) => {

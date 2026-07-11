@@ -1,0 +1,50 @@
+{
+  "awsServices": [
+    {
+      "name": "Child Compute",
+      "serviceCode": "childCompute",
+      "type": "AWSService",
+      "subType": "subService",
+      "isActive": "true",
+      "regions": ["us-west-2", "us-east-1"],
+      "templates": [],
+      "serviceDefinitionUrlPath": "/data/childCompute/en_US.json"
+    },
+    {
+      "name": "Static Strings",
+      "serviceCode": "staticStrings",
+      "type": "static",
+      "isActive": "true",
+      "templates": [],
+      "serviceDefinitionUrlPath": "/data/staticStrings/en_US.json"
+    },
+    {
+      "name": "Parent Compute",
+      "serviceCode": "parentCompute",
+      "slug": "Compute",
+      "description": "Parent calculator selector",
+      "searchKeywords": ["virtual machines", "compute"],
+      "type": "AWSService",
+      "subType": "subServiceSelector",
+      "isActive": "true",
+      "templates": ["missingChild", "childCompute"],
+      "serviceDefinitionLocation": "https://fixtures.example/data/parentCompute/en_US.json"
+    },
+    {
+      "name": "Retired Service",
+      "serviceCode": "retiredService",
+      "slug": "Retired",
+      "type": "AWSService",
+      "isActive": "false",
+      "templates": []
+    },
+    {
+      "name": "Storage Comparison",
+      "serviceCode": "storageTco",
+      "type": "AWSService",
+      "subType": "TCOCalculator",
+      "isActive": true,
+      "templates": []
+    }
+  ]
+}

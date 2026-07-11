@@ -1,0 +1,123 @@
+{
+  "$id": "aws-pricing-calculator-mcp.contract.v2.tools.list_service_catalog.output",
+  "title": "list_service_catalog output",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "catalogVersion": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pricingSupport": {
+            "type": "string"
+          },
+          "calculatorServiceCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "name",
+          "description",
+          "category",
+          "aliases",
+          "capabilities",
+          "regions",
+          "pricingSupport",
+          "calculatorServiceCodes",
+          "metadata"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "nextCursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "catalogVersion",
+    "generatedAt",
+    "services",
+    "nextCursor"
+  ],
+  "additionalProperties": {}
+}

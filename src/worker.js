@@ -76,6 +76,10 @@ function optionsResponse(request, env) {
   return withCorsHeaders(new Response(null, { status: 204 }), request, env);
 }
 
+function isMcpPath(pathname) {
+  return pathname === MCP_PATH;
+}
+
 function accessDeniedResponse(request, env, error) {
   const response = jsonResponse(
     {
@@ -85,7 +89,7 @@ function accessDeniedResponse(request, env, error) {
     { status: 403 },
   );
 
-  return new URL(request.url).pathname === MCP_PATH
+  return isMcpPath(new URL(request.url).pathname)
     ? withCorsHeaders(response, request, env)
     : response;
 }
@@ -101,7 +105,7 @@ function internalErrorResponse(request, env, error) {
     { status: 500 },
   );
 
-  if (pathname === MCP_PATH) {
+  if (isMcpPath(pathname)) {
     return withCorsHeaders(response, request, env);
   }
 
@@ -202,7 +206,7 @@ export default {
     try {
       const url = new URL(request.url);
 
-      if (request.method === "OPTIONS" && url.pathname === MCP_PATH) {
+      if (request.method === "OPTIONS" && isMcpPath(url.pathname)) {
         return optionsResponse(request, env);
       }
 

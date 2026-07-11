@@ -15,10 +15,10 @@ const AURORA_PG_STANDARD = "Aurora Standard";
 const AURORA_PG_PRICING = {
   "us-east-1": {
     instanceHourly: {
-      "db.r6g.large": 0.335,
-      "db.r6g.xlarge": 0.67,
-      "db.r6g.2xlarge": 1.34,
-      "db.r6g.4xlarge": 2.68,
+      "db.r6g.large": 0.26,
+      "db.r6g.xlarge": 0.519,
+      "db.r6g.2xlarge": 1.038,
+      "db.r6g.4xlarge": 2.076,
     },
     pricingMultiplier: {
       OnDemand: 1,
@@ -35,6 +35,29 @@ const AURORA_PG_PRICING = {
       "Aurora I/O-Optimized": 0,
     },
     backupPerGbMonth: 0.021,
+  },
+  "sa-east-1": {
+    instanceHourly: {
+      "db.r6g.large": 0.537,
+      "db.r6g.xlarge": 1.074,
+      "db.r6g.2xlarge": 2.149,
+      "db.r6g.4xlarge": 4.298,
+    },
+    pricingMultiplier: {
+      OnDemand: 1,
+      Reserved: 0.9,
+      ReservedHeavy: 0.84,
+      "Database Savings Plans": 0.87,
+    },
+    storagePerGbMonth: {
+      [AURORA_PG_STANDARD]: 0.19,
+      "Aurora I/O-Optimized": 0.4275,
+    },
+    ioPerMillion: {
+      [AURORA_PG_STANDARD]: 0.38,
+      "Aurora I/O-Optimized": 0,
+    },
+    backupPerGbMonth: 0.0399,
   },
 };
 const AURORA_PG_PROFILES = [
