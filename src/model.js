@@ -1,9 +1,5 @@
 import crypto from "node:crypto";
 
-import { DEFAULT_ENVIRONMENT_SPLIT } from "./catalog.js";
-
-export const ENVIRONMENTS = ["dev", "staging", "prod"];
-
 const HOURS_PER_MONTH = 730;
 const REGION_NAMES = {
   "us-east-1": "US East (N. Virginia)",
@@ -93,11 +89,6 @@ const PRICING = {
   },
 };
 
-const COMPUTE_INSTANCE_OPTIONS = {
-  linux: ["m6i.large", "m6i.xlarge", "m6i.2xlarge"],
-  windows: ["m6i.large", "m6i.xlarge", "m6i.2xlarge"],
-};
-
 const EC2_PRICING_STRATEGY_MULTIPLIERS = {
   "on-demand": 1,
   "savings-plans": 0.86,
@@ -111,81 +102,6 @@ const RDS_PRICING_MODEL_MULTIPLIERS = {
   Reserved: 0.9,
   ReservedHeavy: 0.84,
 };
-
-const RDS_TIER_PROFILES = [
-  {
-    id: "small",
-    maxBudgetUsd: 4_999,
-    envs: [
-      {
-        environment: "dev",
-        instanceType: "db.t4g.large",
-        deploymentOption: "Single-AZ",
-        storageGb: 100,
-      },
-      {
-        environment: "staging",
-        instanceType: "db.r6g.large",
-        deploymentOption: "Single-AZ",
-        storageGb: 100,
-      },
-      {
-        environment: "prod",
-        instanceType: "db.r6g.xlarge",
-        deploymentOption: "Multi-AZ",
-        storageGb: 200,
-      },
-    ],
-  },
-  {
-    id: "medium",
-    maxBudgetUsd: 8_999,
-    envs: [
-      {
-        environment: "dev",
-        instanceType: "db.t4g.large",
-        deploymentOption: "Single-AZ",
-        storageGb: 100,
-      },
-      {
-        environment: "staging",
-        instanceType: "db.r6g.large",
-        deploymentOption: "Multi-AZ",
-        storageGb: 150,
-      },
-      {
-        environment: "prod",
-        instanceType: "db.r6g.2xlarge",
-        deploymentOption: "Multi-AZ",
-        storageGb: 300,
-      },
-    ],
-  },
-  {
-    id: "large",
-    maxBudgetUsd: Number.POSITIVE_INFINITY,
-    envs: [
-      {
-        environment: "dev",
-        instanceType: "db.t4g.large",
-        deploymentOption: "Single-AZ",
-        storageGb: 100,
-      },
-      {
-        environment: "staging",
-        instanceType: "db.r6g.xlarge",
-        deploymentOption: "Multi-AZ",
-        storageGb: 200,
-      },
-      {
-        environment: "prod",
-        instanceType: "db.r6g.4xlarge",
-        deploymentOption: "Multi-AZ",
-        storageGb: 500,
-      },
-    ],
-  },
-];
 
 const SERVICE_ROLE_METADATA = {
   eks: {
@@ -228,14 +144,6 @@ export function roundCurrency(value) {
   return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 }
 
-export function percent(value) {
-  return `${Math.round(Number(value) * 100)}%`;
-}
-
-export function normalizePositiveNumber(value, fallback) {
-  return Number.isFinite(value) && value > 0 ? Number(value) : fallback;
-}
-
 export function parseNumericValue(value, fallback = 0) {
   if (value == null || value === "") {
     return fallback;
@@ -243,27 +151,6 @@ export function parseNumericValue(value, fallback = 0) {
 
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
-}
-
-export function normalizeEnvironmentSplit(environmentSplit = {}) {
-  const merged = {
-    ...DEFAULT_ENVIRONMENT_SPLIT,
-    ...environmentSplit,
-  };
-  const total =
-    normalizePositiveNumber(merged.dev, 0) +
-    normalizePositiveNumber(merged.staging, 0) +
-    normalizePositiveNumber(merged.prod, 0);
-
-  if (total <= 0) {
-    return { ...DEFAULT_ENVIRONMENT_SPLIT };
-  }
-
-  return {
-    dev: merged.dev / total,
-    staging: merged.staging / total,
-    prod: merged.prod / total,
-  };
 }
 
 export function regionNameFor(region) {
@@ -293,59 +180,8 @@ function monthlyFromHourly(hourlyRate) {
   return roundCurrency(hourlyRate * HOURS_PER_MONTH);
 }
 
-function environmentWeights(environmentSplit) {
-  return ENVIRONMENTS.map((environment) => ({
-    environment,
-    weight: environmentSplit[environment],
-  }));
-}
-
-function allocateIntegerByWeights(total, environmentSplit, minimumPerEnvironment = 1) {
-  if (total < minimumPerEnvironment * ENVIRONMENTS.length) {
-    throw new Error(
-      `Unable to allocate ${total} units across ${ENVIRONMENTS.length} environments with minimum ${minimumPerEnvironment}.`,
-    );
-  }
-
-  const base = Object.fromEntries(ENVIRONMENTS.map((environment) => [environment, minimumPerEnvironment]));
-  let remaining = total - minimumPerEnvironment * ENVIRONMENTS.length;
-
-  if (remaining === 0) {
-    return base;
-  }
-
-  const weighted = environmentWeights(environmentSplit).map(({ environment, weight }) => ({
-    environment,
-    exact: remaining * weight,
-  }));
-
-  for (const item of weighted) {
-    const whole = Math.floor(item.exact);
-    base[item.environment] += whole;
-    remaining -= whole;
-    item.fraction = item.exact - whole;
-  }
-
-  weighted
-    .sort((left, right) => right.fraction - left.fraction)
-    .slice(0, remaining)
-    .forEach((item) => {
-      base[item.environment] += 1;
-    });
-
-  return base;
-}
-
 function randomServiceKey(serviceCode, environment) {
   return `${serviceCode}-${environment}-${crypto.randomUUID()}`;
-}
-
-function clamp(value, minimum, maximum) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
-
-export function selectedRdsTier(targetMonthlyUsd) {
-  return RDS_TIER_PROFILES.find((tier) => targetMonthlyUsd <= tier.maxBudgetUsd) ?? RDS_TIER_PROFILES.at(-1);
 }
 
 export function modelEksMonthlyUsd(region, clusterCount) {
@@ -421,121 +257,6 @@ export function modelNatMonthlyUsd(
   return roundCurrency(regionalBase + azBase + dataMonthly);
 }
 
-function targetSupportiveBudget(template, targetMonthlyUsd) {
-  return roundCurrency(
-    clamp(
-      targetMonthlyUsd * template.supportiveTargetRatio,
-      template.minimumSupportiveUsd,
-      template.maximumSupportiveUsd,
-    ),
-  );
-}
-
-export function buildNatPlan(
-  template,
-  region,
-  targetMonthlyUsd,
-  {
-    sharedServicesMultiplier = 1,
-    dataTransferMultiplier = 1,
-  } = {},
-) {
-  const regionalNatGatewayCount = 1;
-  const regionalNatGatewayAzCount = 2;
-  const monthlyBase = modelNatMonthlyUsd(region, regionalNatGatewayCount, regionalNatGatewayAzCount, 0);
-  const targetBudget = roundCurrency(
-    targetSupportiveBudget(template, targetMonthlyUsd) *
-      sharedServicesMultiplier *
-      dataTransferMultiplier,
-  );
-  const requiredDataBudget = Math.max(0, targetBudget - monthlyBase);
-  const dataProcessedGb = Math.max(
-    1_000,
-    Math.round(requiredDataBudget / pricingFor(region).natGateway.dataPerGb),
-  );
-
-  return {
-    regionalNatGatewayCount,
-    regionalNatGatewayAzCount,
-    dataProcessedGb,
-    monthlyUsd: modelNatMonthlyUsd(
-      region,
-      regionalNatGatewayCount,
-      regionalNatGatewayAzCount,
-      dataProcessedGb,
-    ),
-  };
-}
-
-export function rdsPlanMonthlyUsd(region, tier) {
-  return roundCurrency(
-    tier.envs.reduce(
-      (sum, environmentPlan) =>
-        sum +
-        modelRdsMonthlyUsd(
-          region,
-          environmentPlan.instanceType,
-          environmentPlan.deploymentOption,
-          environmentPlan.storageGb,
-        ),
-      0,
-    ),
-  );
-}
-
-function chooseComputeInstanceType(region, operatingSystem, targetComputeBudgetUsd) {
-  const candidates = COMPUTE_INSTANCE_OPTIONS[operatingSystem].map((instanceType) => {
-    const monthlyRate = ec2MonthlyRate(region, operatingSystem, instanceType);
-    const impliedCount = Math.max(ENVIRONMENTS.length, Math.round(targetComputeBudgetUsd / monthlyRate));
-    const countPenalty = impliedCount < 6 ? (6 - impliedCount) * 10_000 : 0;
-    const score =
-      Math.abs(impliedCount - 15) * 100 +
-      countPenalty +
-      Math.abs(impliedCount * monthlyRate - targetComputeBudgetUsd);
-
-    return {
-      instanceType,
-      monthlyRate,
-      impliedCount,
-      score,
-    };
-  });
-
-  candidates.sort((left, right) => left.score - right.score);
-  return candidates[0];
-}
-
-export function buildComputePlan(region, operatingSystem, targetComputeBudgetUsd, environmentSplit) {
-  if (targetComputeBudgetUsd <= 0) {
-    throw new Error("Target compute budget must be positive.");
-  }
-
-  const selectedType = chooseComputeInstanceType(region, operatingSystem, targetComputeBudgetUsd);
-  const totalInstances = Math.max(
-    ENVIRONMENTS.length,
-    Math.round(targetComputeBudgetUsd / selectedType.monthlyRate),
-  );
-  const instancesByEnvironment = allocateIntegerByWeights(totalInstances, environmentSplit, 1);
-  const plans = ENVIRONMENTS.map((environment) => ({
-    environment,
-    instanceType: selectedType.instanceType,
-    instanceCount: instancesByEnvironment[environment],
-    monthlyUsd: modelEc2MonthlyUsd(
-      region,
-      operatingSystem,
-      selectedType.instanceType,
-      instancesByEnvironment[environment],
-    ),
-  }));
-
-  return {
-    instanceType: selectedType.instanceType,
-    totalInstances,
-    plans,
-    monthlyUsd: roundCurrency(plans.reduce((sum, plan) => sum + plan.monthlyUsd, 0)),
-  };
-}
-
 function buildDescription(prefix, environment, details, notes) {
   const parts = [prefix, `Environment: ${environment}.`, details];
 
@@ -544,11 +265,6 @@ function buildDescription(prefix, environment, details, notes) {
   }
 
   return parts.join(" ");
-}
-
-export function parseEnvironmentTag(description) {
-  const match = String(description ?? "").match(/Environment:\s*([a-z0-9_-]+)/i);
-  return match ? match[1].toLowerCase() : null;
 }
 
 export function buildEksService(environment, region, notes) {
@@ -874,134 +590,18 @@ export function serviceEntries(services) {
   return Object.values(services);
 }
 
-export function serviceCodesFor(services) {
-  return serviceEntries(services).map((service) => service.serviceCode);
-}
-
-export function regionsFor(services) {
-  return [...new Set(serviceEntries(services).map((service) => service.region).filter(Boolean))];
-}
-
 export function serviceMonthlyUsd(service) {
   return roundCurrency(Number(service?.serviceCost?.monthly ?? 0));
 }
 
-export function sumServiceMonthlyUsd(services) {
+function sumServiceMonthlyUsd(services) {
   return roundCurrency(
     serviceEntries(services).reduce((sum, service) => sum + serviceMonthlyUsd(service), 0),
   );
 }
 
-export function buildServiceBreakdown(entries) {
-  return entries.map((entry) => cloneJson(entry.breakdown));
-}
-
-export function buildServices(entries) {
+function buildServices(entries) {
   return Object.fromEntries(entries.map((entry) => [entry.key, cloneJson(entry.service)]));
-}
-
-export function buildTemplateEstimateShape({
-  template,
-  region,
-  targetMonthlyUsd,
-  environmentSplit,
-  notes,
-}) {
-  pricingFor(region);
-
-  const rdsTier = selectedRdsTier(targetMonthlyUsd);
-  const natPlan = buildNatPlan(template, region, targetMonthlyUsd);
-  const fixedEksMonthlyUsd = template.includeEks
-    ? roundCurrency(ENVIRONMENTS.length * modelEksMonthlyUsd(region, 1))
-    : 0;
-  const fixedRdsMonthlyUsd = rdsPlanMonthlyUsd(region, rdsTier);
-  const minimumModeledSpendUsd = roundCurrency(
-    fixedEksMonthlyUsd + fixedRdsMonthlyUsd + natPlan.monthlyUsd,
-  );
-  const targetComputeBudgetUsd = roundCurrency(targetMonthlyUsd - minimumModeledSpendUsd);
-
-  if (targetComputeBudgetUsd <= 0) {
-    throw new Error(
-      `targetMonthlyUsd is too low for the minimum viable '${template.id}' baseline in ${region}. Minimum modeled spend is ${minimumModeledSpendUsd.toFixed(2)} USD/month.`,
-    );
-  }
-
-  const computePlan = buildComputePlan(
-    region,
-    template.computeOs,
-    targetComputeBudgetUsd,
-    environmentSplit,
-  );
-  const entries = [];
-
-  if (template.includeEks) {
-    for (const environment of ENVIRONMENTS) {
-      entries.push(buildEksService(environment, region, notes));
-    }
-  }
-
-  for (const compute of computePlan.plans) {
-    entries.push(
-      buildEc2Service(
-        compute.environment,
-        region,
-        template.computeOs,
-        compute.instanceType,
-        compute.instanceCount,
-        notes,
-      ),
-    );
-  }
-
-  for (const database of rdsTier.envs) {
-    entries.push(
-      buildRdsService(
-        database.environment,
-        region,
-        database.instanceType,
-        database.deploymentOption,
-        database.storageGb,
-        notes,
-      ),
-    );
-  }
-
-  entries.push(buildNatService(region, natPlan, notes));
-
-  return {
-    entries,
-    natPlan,
-    rdsTier,
-    computePlan,
-    minimumModeledSpendUsd,
-  };
-}
-
-export function summarizeServicePlan({ template, shape }) {
-  const computeByEnvironment = new Map(
-    shape.computePlan.plans.map((plan) => [plan.environment, plan]),
-  );
-  const databaseByEnvironment = new Map(shape.rdsTier.envs.map((plan) => [plan.environment, plan]));
-
-  return {
-    computeOs: template.computeOs,
-    includesEks: template.includeEks,
-    databaseEngine: "postgresql",
-    rdsTierId: shape.rdsTier.id,
-    computeInstanceType: shape.computePlan.instanceType,
-    totalInstances: shape.computePlan.totalInstances,
-    natProcessedGb: shape.natPlan.dataProcessedGb,
-    minimumModeledSpendUsd: shape.minimumModeledSpendUsd,
-    environments: ENVIRONMENTS.map((environment) => ({
-      environment,
-      eksClusterCount: template.includeEks ? 1 : 0,
-      computeInstanceType: shape.computePlan.instanceType,
-      computeInstanceCount: computeByEnvironment.get(environment)?.instanceCount ?? 0,
-      rdsInstanceType: databaseByEnvironment.get(environment)?.instanceType ?? null,
-      rdsDeploymentOption: databaseByEnvironment.get(environment)?.deploymentOption ?? null,
-      rdsStorageGb: databaseByEnvironment.get(environment)?.storageGb ?? 0,
-    })),
-  };
 }
 
 export function buildEstimatePayloadFromEntries({ estimateName, entries }) {

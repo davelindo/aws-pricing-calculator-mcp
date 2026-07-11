@@ -4,8 +4,10 @@ const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 const DEFAULT_MAX_TOOL_CYCLES = 2;
 const BASE_SYSTEM_PROMPT = [
   "You are an AWS pricing calculator assistant.",
-  "Use generate_calculator_link when the user wants an AWS Pricing Calculator estimate created, saved, or shared.",
-  "Interpret 'container migration', 'kubernetes migration', 'EKS migration', or 'ECS migration' as a strong hint for blueprintId='container-platform' unless the user says it is AWS-to-AWS only.",
+  "Preserve the user's architecture as a component graph; never add services merely to fit a preset pattern.",
+  "Use interpret_architecture for incomplete, mixed-format, or exploratory definitions.",
+  "Use generate_calculator_link when the user wants an AWS Pricing Calculator estimate created, saved, or shared and the full architecture is eligible.",
+  "Pass the user's raw architecture description in definition, with explicit region and monthly target in context when available.",
   "In AWS pricing contexts, interpret phrases like '$25k MRR', '$25k/mo', '$25k per month', or '25k monthly' as a likely targetMonthlyUsd monthly AWS spend unless the user clearly means business revenue instead.",
   "Treat tool results as the source of truth and do not invent calculator links or pricing.",
   "If required inputs are missing, ask only for the minimum facts needed to continue.",
@@ -86,20 +88,10 @@ function inferSystemHints(contents) {
     return hints;
   }
 
-  if (
-    normalized.includes("container migration") ||
-    normalized.includes("kubernetes migration") ||
-    normalized.includes("k8s migration") ||
-    normalized.includes("eks migration") ||
-    normalized.includes("ecs migration")
-  ) {
-    hints.push(
-      "Latest user hint: this looks like a container migration. Prefer blueprintId='container-platform' unless contradicted.",
-    );
-  }
-
   if (monthlyUsd != null && /(calculator|estimate|migration|aws)/i.test(normalized)) {
-    hints.push(`Latest user hint: interpret the monthly AWS spend target as ${monthlyUsd} USD.`);
+    hints.push(
+      `Latest user hint: pass context.targetMonthlyUsd=${monthlyUsd} and keep the full user message as definition.`,
+    );
   }
 
   return hints;
@@ -107,6 +99,25 @@ function inferSystemHints(contents) {
 
 function buildSystemPrompt(contents) {
   return [...BASE_SYSTEM_PROMPT, ...inferSystemHints(contents)].join(" ");
+}
+
+function compactToolDetails(toolResult) {
+  const result = toolResult?.result;
+
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+
+  return {
+    status: result.status ?? result.coverage?.status ?? null,
+    architectureId: result.architectureId ?? result.architecture?.architectureId ?? null,
+    eligible: result.eligibility?.eligible ?? null,
+    blockers: result.eligibility?.blockers ?? [],
+    questions: (result.questions ?? result.architecture?.questions ?? []).map(
+      (question) => question.prompt,
+    ),
+    link: result.link?.url ?? null,
+  };
 }
 
 async function callGemini({
@@ -226,6 +237,7 @@ export async function runGeminiConversation({
           ok: toolResult.ok,
           tool: toolResult.tool,
           summary: toolResult.summary ?? toolResult.error?.message ?? null,
+          details: compactToolDetails(toolResult),
         };
         toolEvents.push({
           name: call.name,

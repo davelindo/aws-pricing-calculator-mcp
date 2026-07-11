@@ -2,7 +2,7 @@
   "name": "aws-pricing-calculator-mcp",
   "version": "4.0.0",
   "private": true,
-  "description": "MCP server for blueprint-driven AWS architecture design, scenario pricing, official calculator links, and estimate validation.",
+  "description": "MCP server for universal AWS architecture interpretation, compositional pricing, official calculator links, and estimate validation.",
   "type": "module",
   "main": "src/index.js",
   "bin": {
@@ -13,7 +13,8 @@
     "chatbot": "node ./src/chatbot/server.js",
     "lint": "node ./scripts/lint.mjs",
     "contracts:generate": "node ./scripts/generate-contracts.mjs",
-    "contracts:check": "npm run contracts:generate && git diff --exit-code -- docs/contracts/v1",
+    "contracts:check": "npm run contracts:generate && node --test test/contract-v2.test.js",
+    "coverage:live": "node scripts/audit-live-calculator-coverage.mjs",
     "test": "node --test",
     "test:live": "AWS_CALCULATOR_LIVE=1 node --test test/live-roundtrip.test.js",
     "check": "npm run lint && npm run contracts:check && npm test",

@@ -104,10 +104,13 @@ export function validateEstimateServiceCodes(estimatePayload) {
         .filter((serviceCode, index) => {
           const service = services[index];
 
+          if (serviceCode === "amazonBedrock") {
+            return !isSupportedBedrockService(service);
+          }
+
           return (
             serviceCode &&
-            !supportedCodes.has(serviceCode) &&
-            !isSupportedBedrockService(service)
+            !supportedCodes.has(serviceCode)
           );
         }),
     ),

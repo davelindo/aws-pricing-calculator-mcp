@@ -2,251 +2,131 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { fetchSavedEstimate, saveEstimate } from "../src/calculator-client.js";
-import { buildEstimatePayloadFromEntries, serviceEntries } from "../src/model.js";
+import { TARGET_REGIONS } from "../src/services/index.js";
+import { interpretArchitecture } from "../src/universal/architecture.js";
 import {
-  buildCalculatorEstimateFromScenario,
-  priceArchitecture,
-} from "../src/planner.js";
-import {
-  getServiceDefinition,
-  resolveServiceDefinitionForSavedService,
-} from "../src/services/index.js";
-import { validateEstimatePayload } from "../src/validation.js";
-import {
-  allowedBlockingFailureIdsForRegion,
-  getScenario,
-  ROADMAP_REGIONS,
-} from "../test-support/helpers.js";
+  buildUniversalEstimateFromPlan,
+  priceUniversalArchitecture,
+  validateUniversalEstimateRoundTrip,
+} from "../src/universal/runtime.js";
 
-const LIVE_ENABLED = process.env.AWS_CALCULATOR_LIVE === "1";
-const CASES = [
+const LIVE = process.env.AWS_CALCULATOR_LIVE === "1";
+const BASELINE_ONLY = [{ id: "baseline", title: "Baseline" }];
+const COMPOSITIONS = [
   {
-    name: "container-platform baseline",
-    blueprintId: "container-platform",
-    targetMonthlyUsd: 7000,
-    includeDefaultAddOns: true,
-    regions: ROADMAP_REGIONS,
+    name: "static-edge-site",
+    targetMonthlyUsd: 500,
+    definition: {
+      Resources: {
+        Assets: { Type: "AWS::S3::Bucket" },
+        Distribution: { Type: "AWS::CloudFront::Distribution" },
+      },
+    },
   },
   {
-    name: "linux-web-stack baseline",
-    blueprintId: "linux-web-stack",
-    targetMonthlyUsd: 5000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "windows-app-stack baseline",
-    blueprintId: "windows-app-stack",
-    targetMonthlyUsd: 6000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "container-platform alb and s3 add-ons",
-    blueprintId: "container-platform",
-    targetMonthlyUsd: 7000,
-    includeDefaultAddOns: false,
-    serviceIds: ["application-load-balancer", "amazon-s3"],
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "container-platform api gateway add-on",
-    blueprintId: "container-platform",
-    targetMonthlyUsd: 7000,
-    includeDefaultAddOns: false,
-    serviceIds: ["amazon-api-gateway-http"],
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "container-platform lambda and dynamodb add-ons",
-    blueprintId: "container-platform",
-    targetMonthlyUsd: 7000,
-    includeDefaultAddOns: false,
-    serviceIds: ["amazon-lambda", "amazon-dynamodb"],
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "container-platform network load balancer add-on",
-    blueprintId: "container-platform",
-    targetMonthlyUsd: 7000,
-    includeDefaultAddOns: false,
-    serviceIds: ["network-load-balancer"],
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "container-platform private networking add-on",
-    blueprintId: "container-platform",
-    targetMonthlyUsd: 7000,
-    includeDefaultAddOns: false,
-    serviceIds: ["amazon-vpc-endpoints"],
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "edge-api-platform baseline",
-    blueprintId: "edge-api-platform",
-    targetMonthlyUsd: 9000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "event-driven-platform baseline",
-    blueprintId: "event-driven-platform",
-    targetMonthlyUsd: 8000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "modernization-platform baseline",
-    blueprintId: "modernization-platform",
-    targetMonthlyUsd: 12000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "lake-foundation baseline",
-    blueprintId: "lake-foundation",
-    targetMonthlyUsd: 12000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "lakehouse-platform baseline",
-    blueprintId: "lakehouse-platform",
-    targetMonthlyUsd: 25000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "streaming-data-platform baseline",
-    blueprintId: "streaming-data-platform",
-    targetMonthlyUsd: 22000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "warehouse-centric-analytics baseline",
-    blueprintId: "warehouse-centric-analytics",
-    targetMonthlyUsd: 18000,
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "windows-app-stack promoted windows services",
-    blueprintId: "windows-app-stack",
-    targetMonthlyUsd: 6000,
-    serviceIds: ["amazon-fsx-windows", "amazon-rds-sqlserver", "aws-waf-v2"],
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "modernization-platform promoted modernization services",
-    blueprintId: "modernization-platform",
-    targetMonthlyUsd: 12000,
-    serviceIds: [
-      "amazon-efs",
-      "amazon-ebs",
-      "amazon-vpc-endpoints",
-      "amazon-elasticache-redis",
-    ],
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "lake-foundation promoted ingestion services",
-    blueprintId: "lake-foundation",
-    targetMonthlyUsd: 12000,
-    serviceIds: ["amazon-kinesis-firehose", "amazon-vpc-endpoints"],
-    regions: ROADMAP_REGIONS,
-  },
-  {
-    name: "streaming-data-platform promoted warehouse serving",
-    blueprintId: "streaming-data-platform",
-    targetMonthlyUsd: 22000,
-    serviceIds: ["amazon-redshift", "amazon-vpc-endpoints"],
-    regions: ROADMAP_REGIONS,
+    name: "async-functions",
+    targetMonthlyUsd: 800,
+    definition: {
+      nodes: [
+        { id: "jobs", serviceId: "amazon-sqs" },
+        { id: "worker", serviceId: "amazon-lambda", quantity: 2 },
+        { id: "telemetry", serviceId: "amazon-cloudwatch" },
+      ],
+      edges: [{ from: "jobs", to: "worker", type: "invokes" }],
+    },
   },
 ];
 
-test(
-  "live calculator round-trips preserve exact saved parity across roadmap coverage",
-  {
-    skip: !LIVE_ENABLED,
-  },
-  async () => {
-    for (const testCase of CASES) {
-      for (const region of testCase.regions ?? ["us-east-1"]) {
-        const priced = priceArchitecture({
-          ...testCase,
-          region,
-          clientName: "LiveTest",
-          includeDefaultAddOns: testCase.includeDefaultAddOns ?? false,
+for (const region of TARGET_REGIONS) {
+  for (const composition of COMPOSITIONS) {
+    test(
+      `live universal round trip: ${composition.name} in ${region}`,
+      { skip: !LIVE },
+      async () => {
+        const architecture = interpretArchitecture({
+          definition: composition.definition,
+          context: {
+            name: `Live ${composition.name} ${region}`,
+            region,
+            targetMonthlyUsd: composition.targetMonthlyUsd,
+          },
         });
-        const baseline = getScenario(priced);
-        const created = buildCalculatorEstimateFromScenario({
-          pricedScenario: baseline,
+        const priced = priceUniversalArchitecture({
+          architecture,
+          targetMonthlyUsd: composition.targetMonthlyUsd,
+          scenarioPolicies: BASELINE_ONLY,
         });
-        const saved = await saveEstimate(created.estimate);
+        const scenario = priced.scenarios[0];
+
+        assert.equal(scenario.eligibility.eligible, true, scenario.eligibility.blockers.join(" "));
+        const built = buildUniversalEstimateFromPlan(scenario.lineItemPlan);
+        const saved = await saveEstimate(built.estimate);
         const fetched = await fetchSavedEstimate(saved.savedKey);
-        const validation = validateEstimatePayload({
-          estimate: fetched.estimate,
-          templateId: created.linkPlan.templateId,
-          expectedMonthlyUsd: baseline.modeledMonthlyUsd,
-          expectedRegion: region,
-        });
-        const allowedBlockingFailureIds = allowedBlockingFailureIdsForRegion(region);
+        const validation = validateUniversalEstimateRoundTrip(
+          built.estimate,
+          fetched.estimate,
+        );
 
-        assert.ok(
-          validation.blockingFailures.every((failure) =>
-            allowedBlockingFailureIds.includes(failure.id),
-          ),
-          `unexpected live blocking failure for ${testCase.name ?? testCase.blueprintId} in ${region}: ${validation.blockingFailures.map((failure) => failure.id).join(", ")}`,
-        );
-        assert.ok(
-          validation.parityDetails.length > 0,
-          `expected parity details for ${testCase.name ?? testCase.blueprintId} in ${region}`,
-        );
-        assert.ok(
-          validation.checks.every(
-            (check) =>
-              !check.blocking ||
-              check.status === "pass" ||
-              allowedBlockingFailureIds.includes(check.id),
-          ),
-          `unexpected blocking check drift for ${testCase.name ?? testCase.blueprintId} in ${region}`,
-        );
+        assert.equal(validation.passed, true, JSON.stringify(validation.checks));
         assert.equal(
-          region === "us-east-1" ? validation.passed : true,
-          true,
-          `live validation should fully pass on the default region path for ${testCase.name ?? testCase.blueprintId}`,
+          Object.keys(fetched.estimate.services).length,
+          scenario.coverage.pricedLineItemCount,
         );
-      }
-    }
-  },
-);
+      },
+    );
+  }
+}
 
 test(
-  "live calculator round-trips preserve ecs on ec2 parity across roadmap regions",
-  {
-    skip: !LIVE_ENABLED,
-  },
+  "live universal round trip: Bedrock Nova Lite inference in us-east-1",
+  { skip: !LIVE },
   async () => {
-    const ecsEc2 = getServiceDefinition("amazon-ecs-ec2");
+    const architecture = interpretArchitecture({
+      definition: {
+        title: "Live Bedrock Nova Lite inference",
+        components: [
+          {
+            id: "foundation-model",
+            serviceId: "amazon-bedrock",
+            configuration: {
+              provider: "amazon",
+              model: "Amazon Nova Lite",
+              inferenceRoute: "geo-cross-region",
+              inferenceType: "on-demand-standard",
+              imageInput: false,
+              promptCaching: false,
+            },
+            usage: {
+              averageRequestsPerMinute: 10,
+              hoursPerDay: 8,
+              averageInputTokensPerRequest: 1_000,
+              averageOutputTokensPerRequest: 250,
+            },
+          },
+        ],
+      },
+      context: {
+        region: "us-east-1",
+        targetMonthlyUsd: 17.28,
+      },
+    });
+    const priced = priceUniversalArchitecture({
+      architecture,
+      scenarioPolicies: BASELINE_ONLY,
+    });
+    const scenario = priced.scenarios[0];
 
-    for (const region of ROADMAP_REGIONS) {
-      const entry = ecsEc2.buildEntry({
-        region,
-        monthlyBudgetUsd: 780,
-        notes: "Live ECS on EC2 parity test.",
-      });
-      const estimate = buildEstimatePayloadFromEntries({
-        estimateName: `LiveTest ECS on EC2 ${region}`,
-        entries: [entry],
-      });
-      const saved = await saveEstimate(estimate);
-      const fetched = await fetchSavedEstimate(saved.savedKey);
-      const savedService = serviceEntries(fetched.estimate?.services)[0];
+    assert.equal(scenario.eligibility.eligible, true, scenario.eligibility.blockers.join(" "));
+    assert.equal(scenario.total.amount, 17.28);
+    const built = buildUniversalEstimateFromPlan(scenario.lineItemPlan);
+    const saved = await saveEstimate(built.estimate);
+    const fetched = await fetchSavedEstimate(saved.savedKey);
+    const validation = validateUniversalEstimateRoundTrip(
+      built.estimate,
+      fetched.estimate,
+    );
 
-      assert.ok(savedService, `expected saved service for ${region}`);
-      assert.equal(savedService.serviceCode, "ec2Enhancement");
-      assert.equal(
-        resolveServiceDefinitionForSavedService(savedService)?.id,
-        "amazon-ecs-ec2",
-        `expected ecs on ec2 service resolution for ${region}`,
-      );
-      assert.equal(
-        ecsEc2.modelSavedMonthlyUsd(savedService),
-        savedService.serviceCost.monthly,
-        `expected ecs on ec2 parity for ${region}`,
-      );
-    }
+    assert.equal(validation.passed, true, JSON.stringify(validation.checks));
+    assert.equal(fetched.estimate.totalCost.monthly, 17.28);
   },
 );

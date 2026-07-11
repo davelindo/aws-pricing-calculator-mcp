@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getTemplate, listServiceCatalog } from "../src/catalog.js";
-import { buildComputePlan, buildNatPlan } from "../src/model.js";
+import { modelEc2MonthlyUsd, modelNatMonthlyUsd } from "../src/model.js";
 import { buildCapabilityMatrix } from "../src/services/helpers.js";
 import {
   TARGET_REGIONS,
   findServiceDefinitionByCalculatorServiceCode,
   getServiceDefinition,
+  listServiceCatalog,
+  registerDynamicServiceDefinitions,
   resolveServiceDefinitionForSavedService,
 } from "../src/services/index.js";
 
@@ -15,6 +16,7 @@ const SERVICE_BUDGETS = {
   "amazon-eks": 220,
   "amazon-ec2": 1800,
   "amazon-athena": 1200,
+  "amazon-bedrock": 17.28,
   "amazon-redshift": 4200,
   "aws-glue-etl": 1600,
   "aws-glue-data-catalog": 400,
@@ -49,11 +51,6 @@ const SERVICE_BUDGETS = {
   "amazon-ecs-fargate": 900,
 };
 
-const DEFAULT_ENVIRONMENT_SPLIT = {
-  dev: 0.2,
-  staging: 0.3,
-  prod: 0.5,
-};
 const ECS_EC2_SERVICE_ID = "amazon-ecs-ec2";
 const ACTIVE_IMPLEMENTATION_STATUSES = new Set(["implemented", "modeled"]);
 
@@ -113,20 +110,18 @@ function buildServiceEntry(definition, region, monthlyBudgetUsd) {
         notes: "Unit test baseline.",
       });
     case "amazon-ec2": {
-      const computePlan = buildComputePlan(
-        region,
-        "linux",
-        monthlyBudgetUsd,
-        DEFAULT_ENVIRONMENT_SPLIT,
+      const instanceType = "m6i.large";
+      const instanceCount = Math.max(
+        1,
+        Math.round(monthlyBudgetUsd / modelEc2MonthlyUsd(region, "linux", instanceType, 1)),
       );
-      const prodPlan = computePlan.plans.find((plan) => plan.environment === "prod");
 
       return definition.buildEntry({
         environment: "prod",
         region,
         operatingSystem: "linux",
-        instanceType: prodPlan.instanceType,
-        instanceCount: prodPlan.instanceCount,
+        instanceType,
+        instanceCount,
         pricingStrategy: {
           selectedOption: "on-demand",
           utilizationValue: "100",
@@ -147,7 +142,12 @@ function buildServiceEntry(definition, region, monthlyBudgetUsd) {
     case "amazon-vpc-nat":
       return definition.buildEntry({
         region,
-        natPlan: buildNatPlan(getTemplate("linux-heavy"), region, monthlyBudgetUsd),
+        natPlan: {
+          regionalNatGatewayCount: 1,
+          regionalNatGatewayAzCount: 2,
+          dataProcessedGb: 1_000,
+          monthlyUsd: modelNatMonthlyUsd(region, 1, 2, 1_000),
+        },
         notes: "Unit test baseline.",
       });
     default:
@@ -352,4 +352,119 @@ test("ecs on ec2 exact service still exposes a budget pricer and exact serialize
     built.service.serviceCost.monthly,
     "ecs on ec2 saved-cost parity",
   );
+});
+
+test("Amazon Bedrock serializes and models the verified Nova Lite inference shape", () => {
+  const bedrock = getServiceDefinition("amazon-bedrock");
+  const component = {
+    configuration: {
+      provider: "amazon",
+      model: "Amazon Nova Lite",
+      inferenceRoute: "geo-cross-region",
+      inferenceType: "on-demand-standard",
+      imageInput: false,
+      promptCaching: false,
+    },
+    usage: {
+      averageRequestsPerMinute: 10,
+      hoursPerDay: 8,
+      averageInputTokensPerRequest: 1_000,
+      averageOutputTokensPerRequest: 250,
+    },
+  };
+  const built = bedrock.buildUniversalEntry({
+    region: "us-east-1",
+    component,
+    notes: "Verified Nova Lite workload.",
+  });
+  const service = built.entry.service;
+  const subService = service.subServices[0];
+
+  assert.equal(bedrock.universalPricingMode, "usage");
+  assert.deepEqual(
+    bedrock.capabilityMatrix
+      .filter((capability) => capability.support === "exact")
+      .map((capability) => capability.region),
+    ["us-east-1"],
+  );
+  assert.equal(service.serviceCode, "amazonBedrock");
+  assert.equal(service.estimateFor, "amazonBedrockClassesGroup");
+  assert.equal(service.version, "0.0.52");
+  assert.equal(service.region, "us-east-1");
+  assert.equal(service.serviceCost.monthly, 17.28);
+  assert.equal(subService.serviceCode, "amazon");
+  assert.equal(subService.estimateFor, "Amazon");
+  assert.equal(subService.version, "0.0.34");
+  assert.deepEqual(subService.calculationComponents, {
+    location: { value: "geo" },
+    tierIR: { value: "standard" },
+    modelSelectiongeoStan: {
+      value: "jqpXyMWar6dZCgJ4nRTHic6D040daCa-N81Kh52Jlac",
+    },
+    selectedModelgeoStan: {
+      value: "urNDBArH5pV5njuTwm41YJmDyeIrg_gD9kCMIHcQdLI",
+    },
+    avgRequestsPerMingeoStan: { value: "10" },
+    hoursPerDayAtThisRategeoStan: { value: "8" },
+    avgInputTokensPerRequestgeoStan: { value: "1000" },
+    avgOutputTokensPerRequestgeoStan: { value: "250" },
+    imageInputgeoStan: { value: "0" },
+    withPromptCachinggeoStan: { value: "0" },
+    selectedModel_odgeoStan: { value: "24444" },
+  });
+  assert.equal(bedrock.modelSavedMonthlyUsd(service), 17.28);
+  assert.equal(resolveServiceDefinitionForSavedService(service)?.id, "amazon-bedrock");
+  assert.match(service.configSummary, /Average input tokens per request \(1000\)/);
+});
+
+test("Amazon Bedrock universal pricing reports missing explicit usage fields", () => {
+  const bedrock = getServiceDefinition("amazon-bedrock");
+
+  assert.throws(
+    () =>
+      bedrock.buildUniversalEntry({
+        region: "us-east-1",
+        component: {
+          configuration: {
+            provider: "amazon",
+            model: "Amazon Nova Lite",
+            inferenceRoute: "geo-cross-region",
+            inferenceType: "on-demand-standard",
+            imageInput: false,
+            promptCaching: false,
+          },
+          usage: {
+            averageRequestsPerMinute: 10,
+            hoursPerDay: 8,
+            averageInputTokensPerRequest: 1_000,
+          },
+        },
+      }),
+    /averageOutputTokensPerRequest/,
+  );
+});
+
+test("runtime calculator definitions can be registered and removed without changing built-ins", () => {
+  const originalCount = listServiceCatalog().length;
+  const dynamic = {
+    id: "aws-calculator:exampleDynamic",
+    name: "Example Dynamic Calculator",
+    category: "aws-calculator-top-level",
+    implementationStatus: "dynamic",
+    keywords: ["example dynamic"],
+    pricingStrategies: ["definition-driven"],
+    calculatorServiceCodes: ["exampleDynamic"],
+    capabilityMatrix: [],
+  };
+
+  try {
+    assert.equal(registerDynamicServiceDefinitions([dynamic]), 1);
+    assert.equal(getServiceDefinition(dynamic.id), dynamic);
+    assert.equal(findServiceDefinitionByCalculatorServiceCode("exampleDynamic"), dynamic);
+    assert.equal(listServiceCatalog().length, originalCount + 1);
+  } finally {
+    registerDynamicServiceDefinitions([]);
+  }
+
+  assert.equal(listServiceCatalog().length, originalCount);
 });

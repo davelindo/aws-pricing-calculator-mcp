@@ -1,8 +1,10 @@
 # Service Compatibility Matrix
 
-This matrix is sourced from the MCP service registry in `src/services/index.js`. It reflects the compatibility surface exposed by `list_service_catalog`.
+This matrix documents the handwritten, parity-tested service adapters in `src/services/index.js`.
+It supplements the dynamic surface loaded from AWS Calculator's published manifest; it is not the
+complete discovery catalog exposed by `list_service_catalog`.
 
-Consumers should treat the per-region capability matrix as the source of truth. A shipped service may be `exact`, `modeled`, or `unavailable` by region over time; the current snapshot happens to be fully exact.
+Consumers should treat the per-region capability matrix as the source of truth. A shipped service may be `exact`, `modeled`, or `unavailable` by region over time. Bedrock is exact only where its current nested calculator payload has been parity-verified.
 
 ## Legend
 
@@ -12,8 +14,11 @@ Consumers should treat the per-region capability matrix as the source of truth. 
 
 ## Summary
 
-- Total services: 35
-- Implemented: 35
+- Active live Calculator definitions: 430
+- Generic definition-compiler coverage: 426 published entries
+- Specialized active definitions: 3, all adapter-backed (EC2, EBS, Windows Workloads)
+- Handwritten service adapters listed below: 36
+- Implemented handwritten adapters: 36
 - Modeled only: 0
 - Unavailable in any roadmap region: 0
 
@@ -46,6 +51,7 @@ Consumers should treat the per-region capability matrix as the source of truth. 
 | `aws-glue-crawlers` | AWS Glue Crawlers | integration | implemented | `awsGlueCrawlers` | exact | exact | exact | exact | exact | exact | Service is calculator-save capable and parity-verified across the roadmap regions. |
 | `aws-glue-etl` | AWS Glue ETL Jobs | integration | implemented | `awsEtlJobsAndDevelopmentEndpoints` | exact | exact | exact | exact | exact | exact | Service is calculator-save capable and parity-verified across the roadmap regions. |
 | `aws-glue-data-catalog` | AWS Glue Data Catalog | metadata | implemented | `awsGlueDataCatalogStorageRequests` | exact | exact | exact | exact | exact | exact | Service is calculator-save capable and parity-verified across the roadmap regions. |
+| `amazon-bedrock` | Amazon Bedrock | machine-learning | implemented | `amazonBedrock` | exact | modeled | modeled | modeled | modeled | modeled | Amazon Nova Lite Geo Cross Region On-Demand Standard is pinned to the current nested calculator schema; only us-east-1 has exact save/fetch parity coverage. |
 | `amazon-vpc-nat` | Amazon VPC / NAT Gateway | networking | implemented | `amazonVirtualPrivateCloud` | exact | exact | exact | exact | exact | exact | Service is calculator-save capable and parity-verified across the roadmap regions. |
 | `application-load-balancer` | Application Load Balancer | networking | implemented | `amazonELB` | exact | exact | exact | exact | exact | exact | Service is calculator-save capable and parity-verified across the roadmap regions. |
 | `network-load-balancer` | Network Load Balancer | networking | implemented | `networkLoadBalancer` | exact | exact | exact | exact | exact | exact | Service is calculator-save capable and parity-verified across the roadmap regions. |

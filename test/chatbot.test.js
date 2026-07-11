@@ -43,9 +43,12 @@ function collectUnsupportedSchemaKeys(value, path = []) {
 }
 
 test("executeChatbotTool can create a calculator link through the shared runtime", async () => {
+  let savedEstimate;
+
   globalThis.fetch = async (url, init = {}) => {
     if (String(url).includes("/saveAs")) {
       assert.equal(init.method, "POST");
+      savedEstimate = JSON.parse(init.body);
       return {
         ok: true,
         json: async () => ({
@@ -59,28 +62,34 @@ test("executeChatbotTool can create a calculator link through the shared runtime
     if (String(url).includes(ESTIMATE_ID)) {
       return {
         ok: true,
-        json: async () => ({
-          name: "Chatbot Estimate",
-          totalCost: {
-            monthly: 6999.98,
-          },
-          services: {},
-        }),
+        json: async () => savedEstimate,
       };
     }
 
     throw new Error(`Unexpected fetch url: ${url}`);
   };
 
-  const result = await executeChatbotTool("generate_calculator_link", {
-    blueprintId: "container-platform",
-    region: "us-east-1",
-    targetMonthlyUsd: 7000,
-  });
+  const result = await executeChatbotTool(
+    "generate_calculator_link",
+    {
+      definition: {
+        Resources: {
+          Assets: { Type: "AWS::S3::Bucket" },
+          Distribution: { Type: "AWS::CloudFront::Distribution" },
+        },
+      },
+      context: {
+        name: "Chatbot Estimate",
+        region: "us-east-1",
+        targetMonthlyUsd: 120,
+      },
+    },
+    { dynamicCatalog: false },
+  );
 
   assert.equal(result.ok, true);
-  assert.equal(result.result.estimate.shareLink, buildShareLink(ESTIMATE_ID));
-  assert.equal(result.result.selectedScenario.calculatorEligible, true);
+  assert.equal(result.result.link.url, buildShareLink(ESTIMATE_ID));
+  assert.equal(result.result.selectedScenario.eligibility.eligible, true);
 });
 
 test("Gemini tool declarations strip unsupported JSON Schema keywords", () => {
@@ -88,7 +97,14 @@ test("Gemini tool declarations strip unsupported JSON Schema keywords", () => {
   const unsupported = collectUnsupportedSchemaKeys(declarations);
 
   assert.deepEqual(unsupported, []);
-  assert.equal(declarations[0].parameters.properties.targetMonthlyUsd.minimum, 0);
+  assert.deepEqual(
+    declarations.map((declaration) => declaration.name),
+    ["generate_calculator_link", "interpret_architecture"],
+  );
+  assert.equal(
+    declarations[0].parameters.properties.context.properties.targetMonthlyUsd.minimum,
+    0,
+  );
 });
 
 test("runGeminiChatTurn executes function calls and returns the final reply", async () => {
@@ -112,9 +128,11 @@ test("runGeminiChatTurn executes function calls and returns the final reply", as
                       id: "call-1",
                       name: "generate_calculator_link",
                       args: {
-                        blueprintId: "container-platform",
-                        region: "us-east-1",
-                        targetMonthlyUsd: 7000,
+                        definition: "Two S3 buckets behind CloudFront.",
+                        context: {
+                          region: "us-east-1",
+                          targetMonthlyUsd: 7000,
+                        },
                       },
                     },
                   },
@@ -159,7 +177,7 @@ test("runGeminiChatTurn executes function calls and returns the final reply", as
       summary: "Tool completed.",
       result: {
         args,
-        shareLink: "https://calculator.aws/#/estimate?id=fake",
+        link: { url: "https://calculator.aws/#/estimate?id=fake" },
       },
     }),
   });
@@ -174,7 +192,7 @@ test("runGeminiChatTurn executes function calls and returns the final reply", as
   );
 });
 
-test("runGeminiChatTurn injects calculator hints for container migration prompts", async () => {
+test("runGeminiChatTurn injects the monthly target without changing the architecture", async () => {
   const requestBodies = [];
 
   globalThis.fetch = async (_url, init = {}) => {
@@ -212,6 +230,6 @@ test("runGeminiChatTurn injects calculator hints for container migration prompts
 
   const prompt = requestBodies[0].systemInstruction.parts[0].text;
 
-  assert.match(prompt, /container migration/i);
-  assert.match(prompt, /25000 USD/i);
+  assert.match(prompt, /context\.targetMonthlyUsd=25000/i);
+  assert.doesNotMatch(prompt, /prefer .* platform/i);
 });

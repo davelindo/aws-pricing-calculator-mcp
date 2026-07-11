@@ -1,0 +1,29 @@
+{
+  "$id": "aws-pricing-calculator-mcp.contract.v2.tools.list_service_catalog.input",
+  "title": "list_service_catalog input",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string"
+    },
+    "serviceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "region": {
+      "type": "string"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "additionalProperties": {}
+}

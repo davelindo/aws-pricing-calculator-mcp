@@ -4,69 +4,58 @@
 ![Node >=18](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-stdio%20%7C%20streamable--http-7c3aed)
 
-`aws-pricing-calculator-mcp` is an MCP server for designing AWS architectures, pricing scenarios, creating official AWS Pricing Calculator share links, and validating the saved estimate. It runs locally over stdio and also ships a Cloudflare Worker that hosts the remote `streamable-http` endpoint plus an Access-protected Gemini chat workspace.
+`aws-pricing-calculator-mcp` is a universal, composition-first interface to AWS Pricing
+Calculator. Give it prose, service lists, graph-shaped JSON, CloudFormation, Terraform-shaped
+data, or several incomplete sources. It preserves the supplied components and relationships,
+resolves what it can, asks targeted questions about what it cannot, prices the resolved graph, and
+creates an official calculator link only when the full in-scope architecture is eligible.
 
-## What This Project Does
-
-This project helps an MCP client turn an architecture brief or blueprint into:
-
-- a normalized architecture design
-- priced baseline, optimized, and aggressive scenarios
-- an official `https://calculator.aws/#/estimate?id=...` share link
-- validation results against what AWS actually saved
-
-The server exposes these tools:
+## Tools
 
 | Tool | Purpose |
 | --- | --- |
-| `list_blueprints` | Discover the supported blueprint catalog |
-| `list_service_catalog` | Inspect service coverage and region support |
-| `design_architecture` | Turn a brief or blueprint into a normalized architecture |
-| `price_architecture` | Price one or more scenario policies |
-| `generate_calculator_link` | Default one-shot path: design or price inputs, choose a scenario, create the official link, and validate it |
-| `create_calculator_link` | Advanced path: commit a previously priced exact scenario, usually via its `pricingCommit` handle |
-| `validate_calculator_link` | Fetch a saved estimate and validate it |
+| `list_service_catalog` | Inspect service identity, regional pricing, and calculator support |
+| `interpret_architecture` | Normalize arbitrary definitions into a provenance-aware component graph |
+| `price_architecture` | Price resolved component instances and report partial/full coverage |
+| `generate_calculator_link` | Interpret, price, save, fetch, and verify an eligible composition |
 
-## Why It Is Useful
+The architecture graph is the source of truth. The engine does not select a preset architecture or
+add neighboring services to make the input resemble one.
 
-- It produces official AWS calculator links instead of local-only estimates.
-- It supports blueprint-driven and brief-driven workflows, so agents can start from either a known pattern or rough input.
-- It compares scenario policies explicitly, including commitment posture, HA posture, storage strategy, and shared-service overhead.
-- It validates the saved estimate for pricing parity, architecture completeness, and governance signals.
-- It ships exact coverage across six roadmap regions:
-  `us-east-1`, `ca-central-1`, `sa-east-1`, `eu-west-1`, `ap-southeast-2`, `ap-northeast-2`.
+## Core behavior
 
-Common blueprints include:
+- Component instances and quantities are preserved; two buckets remain two components.
+- Relationships from graphs, CloudFormation references, Terraform references, and text arrows are
+  retained.
+- Explicit exclusions are first-class constraints.
+- Unknown AWS resources remain visible with open IDs and targeted resolution questions.
+- Explicit component budgets and configuration facts take precedence over inferred defaults.
+- Every compatibility default used for calculator serialization is recorded as an assumption.
+- Partial pricing remains available, but unresolved, unsupported, or modeled-only components block
+  a full exact link.
+- Saved estimates are fetched again and checked against the immutable line-item plan.
 
-- `container-platform`
-- `linux-web-stack`
-- `windows-app-stack`
-- `edge-api-platform`
-- `event-driven-platform`
-- `data-platform-lite`
-- `modernization-platform`
-- `enterprise-data-platform`
+Understanding coverage and calculator coverage are deliberately separate. At runtime the service
+resolver is extended from AWS's published Calculator manifest, and each selected service definition
+is bound and compiled from its published inputs. Missing facts remain targeted questions; they are
+never replaced with guessed calculator values.
 
-Use `list_service_catalog` to inspect the exact service-region matrix from the running server.
+## Getting started
 
-## Getting Started
-
-### Prerequisites
+Prerequisites:
 
 - Node.js `>=18`
 - npm
 - network access to AWS calculator endpoints when creating links or running live parity tests
 
-### Install
+Install and check:
 
 ```bash
-git clone https://github.com/<your-org>/aws-pricing-calculator-mcp.git
-cd aws-pricing-calculator-mcp
 npm install
 npm run check
 ```
 
-### Run Locally Over stdio
+Run over stdio:
 
 ```bash
 npm start
@@ -78,78 +67,138 @@ Or run the executable directly:
 node bin/aws-pricing-calculator-mcp.js
 ```
 
-### Run Remotely On The Cloudflare Worker
-
-```bash
-npm run worker:dev
-```
-
-Deploy the Cloudflare Worker:
-
-```bash
-npm run worker:deploy
-```
-
-The Worker now expects these bindings and vars:
-
-- `CHAT_STATE` Cloudflare KV namespace
-- `CHAT_COORDINATOR` Durable Object binding
-- `GEMINI_API_KEY` Worker secret
-- `GEMINI_MODEL`
-- `CLOUDFLARE_ACCESS_TEAM_DOMAIN`
-- `CLOUDFLARE_ACCESS_AUD`
-- optional `CLOUDFLARE_ACCESS_ISSUER`
-- optional `CLOUDFLARE_ACCESS_JWKS_URL`
-
-The hosted Worker is Access-only. Every route, including `/mcp`, expects a valid `Cf-Access-Jwt-Assertion`.
-
-The Worker serves:
-
-- `/` service info
-- `/health` health info
-- `/chat` the Gemini chat workspace
-- `/mcp` the remote MCP endpoint
-
-### Run The Gemini Chatbot In Docker
-
-The repo also ships a very small Gemini-backed web chatbot that can call exactly two in-process tools:
-
-- `generate_calculator_link`
-
-Build it:
-
-```bash
-docker build -f Dockerfile.chatbot -t aws-pricing-chatbot .
-```
-
-Run it:
-
-```bash
-docker run --rm -p 3000:3000 \
-  -e GEMINI_API_KEY=your-gemini-api-key \
-  -e GEMINI_MODEL=gemini-2.5-flash \
-  aws-pricing-chatbot
-```
-
-Then open `http://localhost:3000`.
-
-### MCP Client Configuration
-
-Example stdio configuration:
+Example MCP configuration:
 
 ```json
 {
   "mcpServers": {
-    "aws-pricing-calculator": {
+    "awsPricingCalculator": {
       "command": "node",
       "args": ["bin/aws-pricing-calculator-mcp.js"],
-      "cwd": "/absolute/path/to/aws-pricing-calculator-mcp"
+      "cwd": "/absolute/path/to/aws-calculator-mcp"
     }
   }
 }
 ```
 
-Example remote configuration:
+## Example workflow
+
+Interpret a mixed partial definition:
+
+```json
+{
+  "sources": [
+    {
+      "id": "stack",
+      "formatHint": "cloudformation",
+      "content": {
+        "Resources": {
+          "Assets": { "Type": "AWS::S3::Bucket" },
+          "Distribution": { "Type": "AWS::CloudFront::Distribution" }
+        }
+      }
+    },
+    {
+      "id": "requirements",
+      "formatHint": "natural-language",
+      "content": "Route 53 provides DNS. Do not add Lambda or API Gateway."
+    }
+  ],
+  "context": {
+    "region": "us-east-1",
+    "targetMonthlyUsd": 1200
+  }
+}
+```
+
+Call `interpret_architecture`. The result includes:
+
+- `components` with resolution state, configuration, usage, scope, and provenance;
+- `relationships` between component instances;
+- `constraints`, `assumptions`, and `conflicts`;
+- `unresolved` items and targeted `questions`;
+- an `architectureRef` for the next tool call.
+
+Pass the returned `architectureRef` to `price_architecture`. Inspect:
+
+- `componentPlans` and per-component costs;
+- `coverage.unpricedComponentIds`;
+- `eligibility.blockers`;
+- the immutable `lineItemPlan` and recorded assumptions.
+
+Call `generate_calculator_link` with the same raw input, an architecture reference, a priced result,
+or an eligible pricing commit. The tool fails closed unless every included component is represented
+by the exact saved estimate.
+
+### Bedrock inference example
+
+This explicit-usage definition resolves and prices the current verified Amazon Nova Lite calculator
+shape without inventing a monthly workload:
+
+```json
+{
+  "definition": {
+    "title": "Bedrock Nova Lite inference example",
+    "components": [
+      {
+        "id": "foundation-model",
+        "serviceId": "amazon-bedrock",
+        "configuration": {
+          "provider": "amazon",
+          "model": "Amazon Nova Lite",
+          "inferenceRoute": "geo-cross-region",
+          "inferenceType": "on-demand-standard",
+          "imageInput": false,
+          "promptCaching": false
+        },
+        "usage": {
+          "averageRequestsPerMinute": 10,
+          "hoursPerDay": 8,
+          "averageInputTokensPerRequest": 1000,
+          "averageOutputTokensPerRequest": 250
+        }
+      }
+    ]
+  },
+  "context": {
+    "region": "us-east-1",
+    "targetMonthlyUsd": 17.28
+  }
+}
+```
+
+At the pinned rates, this is 144 million input tokens plus 36 million output tokens per month,
+for 17.28 USD/month. Unsupported Bedrock providers, models, routes, images, or prompt caching fail
+closed instead of being serialized as the verified Nova Lite shape.
+
+The same path works for services that have no handwritten module. For example, Step Functions
+Standard Workflows with `100000` executions per month and `10` state transitions per workflow
+compile from AWS's live nested definitions to 24.90 USD/month in `us-east-1`.
+
+## Cloudflare Worker
+
+Run locally:
+
+```bash
+npm run worker:dev
+```
+
+Deploy:
+
+```bash
+npm run worker:deploy
+```
+
+The Worker is Cloudflare Access-only and serves:
+
+- `/` service information
+- `/health` health information
+- `/chat` the Gemini chat workspace
+- `/mcp` the streamable HTTP MCP endpoint
+
+Required bindings and variables are documented in [the operator guide](docs/OPERATOR_GUIDE.md).
+
+Remote configuration:
 
 ```json
 {
@@ -162,138 +211,49 @@ Example remote configuration:
 }
 ```
 
-Remote MCP clients must be able to authenticate through Cloudflare Access because bearer-only `/mcp` access is no longer supported on the Worker host.
-
-### Typical Workflow
-
-1. Discover the blueprint catalog when the workload shape is still open.
-
-```json
-{}
-```
-
-Call `list_blueprints`.
-
-2. Design from a brief when the input is still fuzzy.
-
-```json
-{
-  "brief": "Need a 9k monthly edge API platform in eu-west-1 with CloudFront, Lambda, DynamoDB, Route53, and API Gateway."
-}
-```
-
-Call `design_architecture`.
-
-3. Use `generate_calculator_link` as the default one-shot path when the goal is “get me the official link now.”
-
-```json
-{
-  "blueprintId": "edge-api-platform",
-  "region": "eu-west-1",
-  "targetMonthlyUsd": 9000
-}
-```
-
-Call `generate_calculator_link`.
-
-This prices the request, selects the scenario, saves the official AWS estimate, and returns inline validation for the saved result.
-
-4. Use `price_architecture` when you want scenario comparison or a `pricingCommit` handle for advanced flows.
-
-5. Use `create_calculator_link` when you already have a priced exact scenario and want to commit it explicitly.
-
-Pass `pricingCommit` from `price_architecture` as the canonical input. `pricedScenario` is still accepted for compatibility.
-
-6. Use `validate_calculator_link` later to re-validate a saved estimate by share link or estimate id.
-
-```json
-{
-  "shareLinkOrEstimateId": "https://calculator.aws/#/estimate?id=<saved-estimate-id>",
-  "blueprintId": "edge-api-platform",
-  "expectedRegion": "eu-west-1"
-}
-```
-
-Call `validate_calculator_link`.
-
-### Useful Commands
+## Useful commands
 
 ```bash
 npm run check
 ```
 
-Runs lint, verifies the checked-in `v1` contract artifacts are current, and runs the test suite.
+Runs syntax checks, verifies generated contract artifacts, and runs the test suite.
 
 ```bash
 npm run contracts:generate
 ```
 
-Regenerates the checked-in `v1` contract artifacts under `docs/contracts/v1/`.
+Regenerates the checked-in schemas and emitted MCP tool snapshot under `docs/contracts/v2/`.
 
 ```bash
 npm run test:live
 ```
 
-Runs the live save/fetch parity matrix against AWS calculator endpoints.
+Runs the live save/fetch parity suite when `AWS_CALCULATOR_LIVE=1` is set.
 
-### Chat Workspace
-
-The Worker-hosted chat workspace uses Gemini plus the in-process `generate_calculator_link` tool handler.
-
-It stores chat history in Cloudflare KV, coordinates chat API mutations through a Durable Object, identifies users from Cloudflare Access, supports explicit email-based ACL sharing, and allows shared users to fork threads into their own private copies.
-
-## Project Layout
+## Project layout
 
 | Path | Purpose |
 | --- | --- |
-| `src/access.js` | Cloudflare Access JWT validation and normalized user identity |
-| `src/server.js` | MCP tool registration and schemas |
-| `src/calculator-link-runtime.js` | shared calculator-link runtime used by MCP and the chatbot |
-| `src/chatbot/` | Gemini orchestration, Worker chat routes, and KV-backed chat store |
-| `src/worker.js` | Cloudflare Worker host for `/`, `/health`, `/chat`, `/api/*`, and `/mcp` |
-| `public/chat/` | static Worker-served chat UI |
-| `src/architecture.js` | architecture design, scenario pricing, exact link planning |
-| `src/planner.js` | estimate construction helpers used by the MCP surface |
-| `src/validation.js` | saved-estimate validation and policy checks |
-| `src/services/` | service registry, serializers, and saved-cost modeling |
-| `src/contract/v1.js` | frozen `v1` MCP contract definitions |
-| `docs/contracts/v1/` | generated `v1` JSON schemas and emitted tool snapshot |
-| `docs/OPERATOR_GUIDE.md` | operator-oriented usage notes |
-| `test/live-roundtrip.test.js` | live parity matrix for exact coverage |
+| `src/server.js` | Canonical MCP server entry point |
+| `src/universal/architecture.js` | Source adapters and canonical architecture graph |
+| `src/universal/service-registry.js` | Layered service identifiers and resolver metadata |
+| `src/universal/pricing.js` | Compositional component pricing and immutable line-item plans |
+| `src/universal/validation.js` | Generic service, total, target, and region validation |
+| `src/universal/runtime.js` | References, pricing commits, link save/fetch, and round-trip checks |
+| `src/calculator-catalog/` | Live AWS Calculator manifest discovery, identity, cache, and coverage audit |
+| `src/calculator-definition/` | Generic definition compiler plus explicit specialized adapters |
+| `src/universal/dynamic/` | Architecture-fact binding, conditions, provenance, and targeted questions |
+| `src/services/` | Service serializers and saved-cost models |
+| `src/contract/v2.js` | Open MCP contract definitions |
+| `docs/contracts/v2/` | Generated schemas and tool snapshot |
+| `src/chatbot/` | Gemini orchestration and chat storage |
+| `src/worker.js` | Cloudflare Worker host |
 
-## v1 Compatibility
+## Documentation
 
-The `v1` MCP surface is frozen at these tool names:
-
-- `list_blueprints`
-- `list_service_catalog`
-- `design_architecture`
-- `price_architecture`
-- `generate_calculator_link`
-- `create_calculator_link`
-- `validate_calculator_link`
-
-Within `v1`, required top-level fields, stable enum literals, and structured tool-error responses are compatibility commitments. Additive optional fields are allowed. The checked-in source of truth for that contract lives under [docs/contracts/v1/](docs/contracts/v1/).
-
-## Where To Get Help
-
-- Read the operator guide: [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md)
-- Check the example live coverage matrix: [test/live-roundtrip.test.js](test/live-roundtrip.test.js)
-- Inspect tool input and output schemas in [src/server.js](src/server.js)
-- If something looks wrong, open an issue or send a pull request with a failing test case
-
-## Who Maintains And Contributes
-
-This repository is maintained by the repository owner and contributors to `davelindo/aws-pricing-calculator-mcp`.
-
-If you want to contribute:
-
-- start with [CONTRIBUTING.md](CONTRIBUTING.md)
-- run `npm run check` before opening a change
-- run `npm run test:live` when changing serializer coverage, region parity, or validation behavior
-- keep examples, fixtures, and docs free of customer-specific data
-
-## Additional Documentation
-
-- [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [Universal interface design](docs/UNIVERSAL_INTERFACE_V2.md)
+- [Operator guide](docs/OPERATOR_GUIDE.md)
+- [Service compatibility matrix](docs/SERVICE_COMPATIBILITY_MATRIX.md)
+- [MCP setup snippets](docs/MCP_SETUP_SNIPPETS.md)
+- [Contributing](CONTRIBUTING.md)

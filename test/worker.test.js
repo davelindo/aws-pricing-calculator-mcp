@@ -383,6 +383,7 @@ test("chat API can create a calculator-backed reply and persist the conversation
   const token = await access.sign("owner@example.com");
   const estimateId = "89abcdef0123456789abcdef0123456789abcdef";
   let geminiCalls = 0;
+  let savedEstimate;
 
   globalThis.fetch = async (url, init = {}) => {
     const stringUrl = String(url);
@@ -392,17 +393,14 @@ test("chat API can create a calculator-backed reply and persist the conversation
     }
 
     if (stringUrl.includes("/saveAs")) {
+      savedEstimate = JSON.parse(init.body);
       return responseJson({
         body: JSON.stringify({ savedKey: estimateId }),
       });
     }
 
     if (stringUrl.includes(estimateId)) {
-      return responseJson({
-        name: "Worker Estimate",
-        totalCost: { monthly: 7001.12 },
-        services: {},
-      });
+      return responseJson(savedEstimate);
     }
 
     if (stringUrl.includes("generativelanguage.googleapis.com")) {
@@ -422,9 +420,17 @@ test("chat API can create a calculator-backed reply and persist the conversation
                       id: "call-1",
                       name: "generate_calculator_link",
                       args: {
-                        blueprintId: "container-platform",
-                        region: "us-east-1",
-                        targetMonthlyUsd: 7000,
+                        definition: {
+                          Resources: {
+                            Assets: { Type: "AWS::S3::Bucket" },
+                            Distribution: { Type: "AWS::CloudFront::Distribution" },
+                          },
+                        },
+                        context: {
+                          name: "Worker Estimate",
+                          region: "us-east-1",
+                          targetMonthlyUsd: 7000,
+                        },
                       },
                     },
                   },

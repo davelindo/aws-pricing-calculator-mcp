@@ -14,7 +14,7 @@ The project requires Node.js `>=18`.
 ## Change Expectations
 
 - Keep the MCP tool surface in sync with [src/server.js](src/server.js).
-- Add or update tests for serializer, pricing, validation, or blueprint changes.
+- Add or update tests for source adapters, service resolution, pricing, validation, or serializer changes.
 - Update [README.md](README.md) and [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md) when the user-facing workflow changes.
 - Keep examples, fixtures, and documentation free of customer-specific or sensitive data.
 
@@ -45,7 +45,7 @@ node scripts/extract-calculator-definitions.mjs
 Then add or update:
 
 - the service module in `src/services/`
-- scenario or catalog behavior if the service changes blueprint coverage
+- service resolver identifiers and capability metadata
 - local tests
 - live parity coverage where appropriate
 
@@ -54,6 +54,6 @@ Then add or update:
 Open a pull request with:
 
 - a short summary of the change
-- the affected blueprint or service families
+- the affected source formats, components, or service families
 - the commands you ran
 - any known gaps or follow-up work

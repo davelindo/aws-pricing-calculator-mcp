@@ -5,6 +5,7 @@ import { amazonAthenaService } from "./amazon-athena.js";
 import { amazonApiGatewayHttpService } from "./amazon-api-gateway-http.js";
 import { amazonAuroraMysqlService } from "./amazon-aurora-mysql.js";
 import { amazonAuroraPostgresqlService } from "./amazon-aurora-postgresql.js";
+import { amazonBedrockService } from "./amazon-bedrock.js";
 import { amazonCloudfrontService } from "./amazon-cloudfront.js";
 import { amazonCloudwatchService } from "./amazon-cloudwatch.js";
 import { amazonDynamodbService } from "./amazon-dynamodb.js";
@@ -63,6 +64,7 @@ const SERVICE_DEFINITIONS = [
   amazonEcsEc2Service,
   amazonCloudfrontService,
   amazonLambdaService,
+  amazonBedrockService,
   amazonDynamodbService,
   amazonApiGatewayHttpService,
   amazonRoute53Service,
@@ -79,17 +81,69 @@ const SERVICE_DEFINITIONS = [
 const SERVICE_DEFINITION_MAP = new Map(
   SERVICE_DEFINITIONS.map((service) => [service.id, service]),
 );
+const BUILT_IN_SERVICE_IDS = new Set(SERVICE_DEFINITIONS.map((service) => service.id));
+const BUILT_IN_SERVICE_CODES = new Set(
+  SERVICE_DEFINITIONS.flatMap((service) => service.calculatorServiceCodes),
+);
+const DYNAMIC_SERVICE_IDS = new Set();
 
 export { TARGET_REGIONS, SUPPORT_STATES, capabilityForRegion };
 
 const SERVICE_CODE_MAP = new Map();
 
-for (const service of SERVICE_DEFINITIONS) {
-  for (const serviceCode of service.calculatorServiceCodes) {
-    if (!SERVICE_CODE_MAP.has(serviceCode)) {
-      SERVICE_CODE_MAP.set(serviceCode, service);
+function rebuildServiceCodeMap() {
+  SERVICE_CODE_MAP.clear();
+
+  for (const service of SERVICE_DEFINITIONS) {
+    for (const serviceCode of service.calculatorServiceCodes) {
+      if (!SERVICE_CODE_MAP.has(serviceCode)) {
+        SERVICE_CODE_MAP.set(serviceCode, service);
+      }
     }
   }
+}
+
+rebuildServiceCodeMap();
+
+function removeDynamicServiceDefinitions() {
+  for (let index = SERVICE_DEFINITIONS.length - 1; index >= 0; index -= 1) {
+    if (DYNAMIC_SERVICE_IDS.has(SERVICE_DEFINITIONS[index].id)) {
+      SERVICE_DEFINITIONS.splice(index, 1);
+    }
+  }
+  for (const serviceId of DYNAMIC_SERVICE_IDS) {
+    SERVICE_DEFINITION_MAP.delete(serviceId);
+  }
+  DYNAMIC_SERVICE_IDS.clear();
+}
+
+function isRegistrableDynamicDefinition(definition) {
+  return Boolean(
+    definition?.id &&
+      !BUILT_IN_SERVICE_IDS.has(definition.id) &&
+      !SERVICE_DEFINITION_MAP.has(definition.id) &&
+      Array.isArray(definition.calculatorServiceCodes) &&
+      !definition.calculatorServiceCodes.some((serviceCode) =>
+        BUILT_IN_SERVICE_CODES.has(serviceCode),
+      ),
+  );
+}
+
+export function registerDynamicServiceDefinitions(definitions, { replace = true } = {}) {
+  if (replace && DYNAMIC_SERVICE_IDS.size > 0) {
+    removeDynamicServiceDefinitions();
+  }
+
+  for (const definition of definitions ?? []) {
+    if (!isRegistrableDynamicDefinition(definition)) continue;
+
+    SERVICE_DEFINITIONS.push(definition);
+    SERVICE_DEFINITION_MAP.set(definition.id, definition);
+    DYNAMIC_SERVICE_IDS.add(definition.id);
+  }
+
+  rebuildServiceCodeMap();
+  return DYNAMIC_SERVICE_IDS.size;
 }
 
 export function getServiceDefinition(serviceId) {
@@ -130,5 +184,15 @@ export function listServiceDefinitions() {
     keywords: [...service.keywords],
     pricingStrategies: [...service.pricingStrategies],
     calculatorServiceCodes: [...service.calculatorServiceCodes],
+    universalPricingMode: service.universalPricingMode ?? "budget",
+  }));
+}
+
+export function listServiceCatalog() {
+  return listServiceDefinitions().map((service) => ({
+    ...service,
+    supportedRegions: service.capabilityMatrix
+      .filter((entry) => entry.support !== "unavailable")
+      .map((entry) => entry.region),
   }));
 }
